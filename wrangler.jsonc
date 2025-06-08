@@ -2,37 +2,40 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "chat-backend",
   "main": "src/index.ts",
-  "compatibility_date": "2025-06-08"
-  // "compatibility_flags": [
-  //   "nodejs_compat"
-  // ],
-  // "vars": {
-  //   "MY_VAR": "my-variable"
-  // },
-  // "kv_namespaces": [
-  //   {
-  //     "binding": "MY_KV_NAMESPACE",
-  //     "id": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-  //   }
-  // ],
-  // "r2_buckets": [
-  //   {
-  //     "binding": "MY_BUCKET",
-  //     "bucket_name": "my-bucket"
-  //   }
-  // ],
-  // "d1_databases": [
-  //   {
-  //     "binding": "MY_DB",
-  //     "database_name": "my-database",
-  //     "database_id": ""
-  //   }
-  // ],
-  // "ai": {
-  //   "binding": "AI"
-  // },
-  // "observability": {
-  //   "enabled": true,
-  //   "head_sampling_rate": 1
-  // }
+  "compatibility_date": "2025-06-08",
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
+  "workers_dev": false,
+  "preview_urls": false,
+  "vars": {
+    "MY_VAR": "my-variable"
+  },
+  "kv_namespaces": [
+    {
+      "binding": "KV",
+      "id": "20c1b70a81bb41b8bddb0f97b7b6e430"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "R2",
+      "bucket_name": "chat-assets-prod"
+    }
+  ],
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "chat-db-prod",
+      "database_id": "81b5553a-670f-4c7e-8d9e-8404ac54765e",
+      "migrations_dir": "libs/db/migrations/sqlite"
+    }
+  ],
+//  "ai": {
+//    "binding": "AI"
+//  },
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  }
 }

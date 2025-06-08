@@ -2,13 +2,22 @@
   "name": "chat-backend",
   "scripts": {
     "dev": "wrangler dev",
-    "deploy": "wrangler deploy --minify",
-    "cf-typegen": "wrangler types --env-interface CloudflareBindings"
+    "deploy": "wrangler deploy",
+    "migrate:generate": "drizzle-kit generate",
+    "migrate:dev": "wrangler d1 migrations apply DB",
+    "migrate:prod": "wrangler d1 migrations apply DB --remote"
   },
   "dependencies": {
-    "hono": "^4.7.9"
+    "@hono/zod-validator": "^0.7.0",
+    "drizzle-orm": "^0.44.2",
+    "hono": "^4.7.9",
+    "zod": "^3.25.56"
   },
   "devDependencies": {
+    "@cloudflare/workers-types": "^4.20250607.0",
+    "@types/node": "^22.15.30",
+    "drizzle-kit": "^0.31.1",
+    "prettier": "^3.5.3",
     "wrangler": "^4.4.0"
   }
 }
