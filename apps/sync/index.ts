@@ -5,8 +5,15 @@ import { DbInstance, initDbConnect } from '../../libs/db/init'
 import { Hono } from 'hono'
 import { makeError } from '../../libs/utils/make-error'
 import { ErrorCode } from '../../libs/constants/errors'
-import { sendMessage } from '../../libs/ai/send-message'
+import { AiMessage, sendMessage } from '../../libs/ai/send-message'
 import { AiModel } from '../../libs/constants/ai-model'
+
+import { Channel, Message, messagesTable } from '../../libs/db/schema'
+import { WebSocketOpCode } from '../../libs/constants/web-socket-op-code'
+import { AiReturnType } from '../../libs/constants/ai-return-type'
+import { MessageState } from '../../libs/constants/message-state'
+import { eq } from 'drizzle-orm'
+import { askAi } from '../../libs/ai/ask-ai'
 
 export interface WebSocketMeta {
   userId: string
@@ -15,6 +22,7 @@ export interface WebSocketMeta {
 export class UserDo extends DurableObject<EventEnvironment> {
   private sessions: Map<WebSocket, { meta: WebSocketMeta }>
   private db: DbInstance
+  private messages: Map<string, string> = new Map()
 
   constructor(ctx: DurableObjectState, env: EventEnvironment) {
     super(ctx, env)
@@ -72,7 +80,9 @@ export class UserDo extends DurableObject<EventEnvironment> {
     this.broadcastMessage(user, `User: ${user}, Echo: ${message}, clients: ${this.sessions.size}`)
   }
 
-  broadcastMessage(userId: string, message: string) {
+  broadcastMessage(userId: string, message: any) {
+    if (typeof message !== 'string') message = JSON.stringify(message)
+
     this.sessions.forEach((session, ws) => {
       try {
         if (session.meta.userId === userId) ws.send(message)
@@ -88,26 +98,141 @@ export class UserDo extends DurableObject<EventEnvironment> {
   ) {
     this.sessions.delete(ws)
 
-    ws.close(code, 'Durable Object is closing WebSocket')
+    try {
+      ws.close(code, 'Durable Object is closing WebSocket')
+    } catch (e) {
+      console.error(e)
+    }
   }
 
-  async askAi(userId: string, messageId: string, content: string) {
-    const stream = await sendMessage(
-      this.env.AI.gateway('chat-prod'),
-      'haha',
-      AiModel.AnthropicClaudeSonnet4,
-      [ { role: 'user', content } ]
-    )
+  ackChannelCreate(userId: string, channel: Channel) {
+    this.broadcastMessage(userId, {
+      op: WebSocketOpCode.ChannelCreate,
+      data: { channel }
+    })
+  }
 
-    if (!stream) return
+  ackChannelUpdate(userId: string, channel: Channel) {
+    console.log('ackChannelUpdate', userId, channel.id)
+    this.broadcastMessage(userId, {
+      op: WebSocketOpCode.ChannelUpdate,
+      data: { channel }
+    })
+  }
 
-    const decoder = new TextDecoder()
+  ackChannelDelete(userId: string, channelId: string) {
+    this.broadcastMessage(userId, {
+      op: WebSocketOpCode.ChannelDelete,
+      data: { channelId }
+    })
+  }
 
-    // subscribe to stream and broadcast every update
-    for await (const chunk of stream) {
-      const text = decoder.decode(chunk, { stream: true })
-      this.broadcastMessage(userId, text)
+  ackMessageCreate(userId: string, message: Message) {
+    this.broadcastMessage(userId, {
+      op: WebSocketOpCode.MessageCreate,
+      data: { message }
+    })
+  }
+
+  ackMessageUpdate(userId: string, message: Message) {
+    this.broadcastMessage(userId, {
+      op: WebSocketOpCode.MessageUpdate,
+      data: { message }
+    })
+  }
+
+  ackMessageComplement(userId: string, messageId: string, chunk: string, ts: number) {
+    this.broadcastMessage(userId, {
+      op: WebSocketOpCode.MessageComplement,
+      data: { messageId, chunk, ts }
+    })
+  }
+
+  ackMessageDelete(userId: string, messageId: string) {
+    this.broadcastMessage(userId, {
+      op: WebSocketOpCode.MessageDelete,
+      data: { messageId }
+    })
+  }
+
+  async complementMessage(userId: string, messageId: string, current: Message, history: Message[]) {
+    const messages: AiMessage[] = [
+      {
+        role: 'system',
+        content: 'You are a helpful assistant. Please answer the user\'s questions based on the provided context.',
+      },
+      ...history
+        .filter(m => m.content)
+        .map(msg => ({
+          role: msg.role,
+          content: msg.content!,
+        })),
+    ]
+
+    const stream = await askAi<AiReturnType.Stream>(this.env, current.model, messages, AiReturnType.Stream)
+
+    if (!stream) {
+      const msg = await this.db
+        .update(messagesTable)
+        .set({ state: MessageState.Failed })
+        .where(eq(messagesTable.id, messageId))
+        .returning()
+        .execute()
+
+      this.ackMessageUpdate(userId, msg[0])
+
+      return
     }
+
+    this.messages.set(messageId, '')
+
+    const reader = stream.getReader()
+    let ts = Date.now()
+    let lastSaveTime = Date.now()
+    const SAVE_INTERVAL = 3000 // 3 seconds
+
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+
+      const textChunk = value
+      ts = Date.now()
+      this.ackMessageComplement(userId, messageId, textChunk, ts)
+      this.messages.set(messageId, this.messages.get(messageId) + textChunk)
+
+      // persist at least part of the message if DO restarts
+      if (ts - lastSaveTime >= SAVE_INTERVAL) {
+        await this.db
+          .update(messagesTable)
+          .set({
+            content: this.messages.get(messageId) || '',
+            updatedAt: ts,
+          })
+          .where(eq(messagesTable.id, messageId))
+          .execute()
+
+        lastSaveTime = ts
+      }
+    }
+
+    const msg = await this.db
+      .update(messagesTable)
+      .set({
+        state: MessageState.Completed,
+        content: this.messages.get(messageId) || '',
+        updatedAt: ts
+      })
+      .where(eq(messagesTable.id, messageId))
+      .returning()
+      .execute()
+
+    this.messages.delete(messageId)
+
+    this.ackMessageUpdate(userId, msg[0])
+  }
+
+  getIncompleteMessage(messageId: string): string | undefined {
+    return this.messages.get(messageId)
   }
 }
 

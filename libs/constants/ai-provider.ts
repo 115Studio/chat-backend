@@ -1,6 +1,6 @@
 export enum AiProvider {
   AmazonBedrock = 'amazon-bedrock',
-  Anthropic = 'anthropic', 
+  Anthropic = 'anthropic',
   AzureOpenAi = 'azure-openai',
   Cartesia = 'cartesia',
   Cerebras = 'cerebras',
@@ -8,6 +8,8 @@ export enum AiProvider {
   Deepseek = 'deepseek',
   ElevenLabs = 'elevenlabs',
   GoogleAiStudio = 'google-ai-studio',
+  // Default unknown provider to Google AI Studio
+  UnknownToGoogleAi = 'google-ai-studio',
   GoogleVertexAi = 'google-vertex-ai',
   Grok = 'grok',
   Groq = 'groq',
@@ -17,5 +19,5 @@ export enum AiProvider {
   OpenRouter = 'openrouter',
   Perplexity = 'perplexity',
   Replicate = 'replicate',
-  WorkersAi = 'workers-ai'
+  // WorkersAi = 'workers-ai'
 }

@@ -1,5 +1,10 @@
 import { AiModel } from '../constants/ai-model'
 import { AiProvider } from '../constants/ai-provider'
+import { EventEnvironment } from '../../environment'
+import { modelToProvider } from './model-to-provider'
+import { anthropic } from './providers/anthropic'
+import { google } from './providers/google'
+import { openai } from './providers/openai'
 
 export interface AiMessageContent {
 
@@ -11,26 +16,24 @@ export interface AiMessage {
 }
 
 export const sendMessage = async (
-  gateway: AiGateway,
-  providerToken: string,
+  env: EventEnvironment,
   model: AiModel,
   messages: AiMessage[],
 ): Promise<ReadableStream | null> => {
-  console.log('Sending message to AI provider: a', 'Model:', model, 'Messages:', messages)
+  const provider = modelToProvider(model)
 
-  const response = await gateway.run({
-    provider: 'compat',
-    endpoint: 'chat/completions',
-    headers: {
-      'Authorization': `Bearer ${providerToken}`,
-    },
-    query: {
-      model,
-      messages
-    }
-  })
+  switch (provider) {
+    case AiProvider.Anthropic:
+      return anthropic(env.ANTHROPIC_AUTH, model, messages)
 
-  console.log('AI provider response:', response.status, response.statusText)
+    case AiProvider.GoogleAiStudio:
+      return google(env.GOOGLE_AI_AUTH, model, messages)
 
-  return response.body
+    case AiProvider.OpenAi:
+      return openai(env.OPENAI_AUTH, model, messages)
+
+    default:
+    case AiProvider.UnknownToGoogleAi:
+      return google(env.GOOGLE_AI_AUTH, AiModel.GoogleGemini20Flash, messages)
+  }
 }

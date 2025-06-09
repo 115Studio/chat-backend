@@ -8,9 +8,10 @@ export enum WebSocketOpCode {
 
   MessageCreate = 10100,
   MessageUpdate,
+  MessageComplement,
   MessageDelete,
 
-  ConversationCreate = 10110,
-  ConversationUpdate,
-  ConversationDelete,
+  ChannelCreate = 10110,
+  ChannelUpdate,
+  ChannelDelete,
 }

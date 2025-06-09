@@ -8,7 +8,6 @@ type HonoEnvironment = Env & {
     DB: D1Database
     KV: KVNamespace
     R2: R2Bucket
-    AI: Ai
 
     USER_DURABLE_OBJECT: DurableObjectNamespace<UserDo>
 
@@ -17,6 +16,10 @@ type HonoEnvironment = Env & {
 
     DISCORD_CLIENT_ID: string
     DISCORD_CLIENT_SECRET: string
+
+    ANTHROPIC_AUTH?: string
+    GOOGLE_AI_AUTH?: string
+    OPENAI_AUTH?: string
   }
 }
 

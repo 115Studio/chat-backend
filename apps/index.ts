@@ -7,7 +7,7 @@ import { ErrorCode, errorMessages } from '../libs/constants/errors'
 import oauth from './oauth'
 import users from './users'
 import sync, { UserDo } from './sync'
-import chats from './chats'
+import channels from './channels'
 
 const app = new Hono<HonoEnvironment>()//.basePath('/v1')
 
@@ -25,7 +25,7 @@ app.onError((err, ctx) => {
 
 app.get('/', (c) => c.text('Nothing here!'))
 
-app.route('/chats', chats)
+app.route('/channels', channels)
 app.route('/oauth', oauth)
 app.route('/users', users)
 app.route('/sync', sync)
