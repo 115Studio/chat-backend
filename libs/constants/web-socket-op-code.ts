@@ -2,6 +2,7 @@
 * Websocket operation codes are used only for server-to-client communication.
 * */
 export enum WebSocketOpCode {
+  Heartbeat,
   ForceClientRefresh = 1000,
   UserSettingsUpdate,
   UserPlanUpdate,

@@ -74,10 +74,16 @@ export class UserDo extends DurableObject<EventEnvironment> {
     })
   }
 
-  async webSocketMessage(ws: WebSocket, message: string | ArrayBuffer) {
-    console.log(this.sessions.entries())
-    const user = this.sessions.get(ws)?.meta.userId!
-    this.broadcastMessage(user, `User: ${user}, Echo: ${message}, clients: ${this.sessions.size}`)
+  // async webSocketMessage(ws: WebSocket, message: string | ArrayBuffer) {
+  //   // console.log(this.sessions.entries())
+  //   const user = this.sessions.get(ws)?.meta.userId!
+  //   this.broadcastMessage(user, `User: ${user}, Echo: ${message}, clients: ${this.sessions.size}`)
+  // }
+
+  async heartbeat() {
+    this.sessions.forEach((s, ws) => {
+      ws.send(JSON.stringify({ op: WebSocketOpCode.Heartbeat, data: { ts: Date.now() } }))
+    })
   }
 
   broadcastMessage(userId: string, message: any) {
