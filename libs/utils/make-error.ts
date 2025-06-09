@@ -6,7 +6,7 @@ import {
   // @ts-ignore
 } from 'hono/http-exception/dist/types'
 
-export const makeError = (code: ErrorCode, http: StatusCode = 500) => {
+export const makeError = (code: ErrorCode, http: StatusCode) => {
   return new HTTPException(http as ContentfulStatusCode, {
     message: `[${code}] ${errorMessages[code]}`,
   })

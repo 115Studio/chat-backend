@@ -1,9 +1,15 @@
-import { sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
+import { integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
 import { OauthProvider } from '../constants/oauth-provider'
+import { UserPlan } from '../constants/user-plan'
 
 export const usersTable = sqliteTable('users', {
   id: text('id').primaryKey(),
-  email: text('email').notNull(),
+
+  email: text('email'),
+  name: text('name').notNull(),
+
+  plan: integer('plan').$type<UserPlan>().default(UserPlan.Free).notNull(),
+
   oauthId: text('oauth_id'),
   oauthProvider: text('oauth_provider').$type<OauthProvider | undefined>()
 }, (t) => [
