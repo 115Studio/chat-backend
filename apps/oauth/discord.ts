@@ -10,12 +10,13 @@ import { initDbConnect } from '../../libs/db/init'
 import { OauthProvider } from '../../libs/constants/oauth-provider'
 import { signJwt } from '../../libs/crypto/jwt'
 import { selectUserByOauth } from '../../libs/users/select-user'
+import { zResponse } from '../../libs/utils/z-response'
 
 const app = new Hono<HonoEnvironment>()
 
 const discordAuthorizeDto = z.object({
   code: z.string(),
-  redirectUri: z.url(),
+  redirect: z.url(),
 })
 
 interface DiscordTokens {
@@ -25,8 +26,8 @@ interface DiscordTokens {
   scope: string
 }
 
-app.post('/authorize', zValidator('json', discordAuthorizeDto), async (c) => {
-  const { code, redirectUri } = c.req.valid('json')
+app.post('/authorize', zValidator('json', discordAuthorizeDto, zResponse), async (c) => {
+  const { code, redirect } = c.req.valid('json')
 
   const e = c.env, db = initDbConnect(e)
 
@@ -35,7 +36,7 @@ app.post('/authorize', zValidator('json', discordAuthorizeDto), async (c) => {
     client_secret: e.DISCORD_CLIENT_SECRET,
     grant_type: 'authorization_code',
     code,
-    redirect_uri: redirectUri,
+    redirect_uri: redirect,
     scope: 'identify email',
   })
 
@@ -78,7 +79,8 @@ app.post('/authorize', zValidator('json', discordAuthorizeDto), async (c) => {
     id: user.id,
     email: user.email,
     name: user.name,
-    jwt: await signJwt(e.JWT_SECRET, user.id, user.plan)
+    jwt: await signJwt(e.JWT_SECRET, user.id, user.plan),
+    plan: user.plan,
   })
 })
 

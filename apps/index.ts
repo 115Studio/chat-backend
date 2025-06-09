@@ -9,7 +9,7 @@ import users from './users'
 import sync, { UserDo } from './sync'
 import channels from './channels'
 
-const app = new Hono<HonoEnvironment>()//.basePath('/v1')
+const app = new Hono<HonoEnvironment>().basePath('/api/v1')
 
 app.use(cors())
 
@@ -20,7 +20,7 @@ app.onError((err, ctx) => {
 
   console.error(err)
 
-  return ctx.json({ error: `[${ErrorCode.UnknownError}] ${errorMessages[ErrorCode.UnknownError]}` }, 500)
+  return ctx.json({ error: `[${ErrorCode.UnknownError}]: ${errorMessages[ErrorCode.UnknownError]}` }, 500)
 })
 
 app.get('/', (c) => c.text('Nothing here!'))

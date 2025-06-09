@@ -1,5 +1,6 @@
 export enum ErrorCode {
   UnknownError,
+  BadRequest = 400,
   Unauthorized = 1000,
   AuthorizationFailed,
   ThirdPartyFailure,
@@ -9,6 +10,7 @@ export enum ErrorCode {
 
 export const errorMessages: Record<ErrorCode, string> = {
   [ErrorCode.UnknownError]: 'Unknown error',
+  [ErrorCode.BadRequest]: 'Bad request',
   [ErrorCode.Unauthorized]: 'Unauthorized',
   [ErrorCode.AuthorizationFailed]: 'Authorization failed',
   [ErrorCode.ThirdPartyFailure]: 'Third-party service failure',

@@ -19,6 +19,7 @@ import { askAi } from '../../libs/ai/ask-ai'
 import { AiMessage } from '../../libs/ai/send-message'
 import { UserDo } from '../sync'
 import { JwtPayload } from '../../libs/crypto/jwt'
+import { zResponse } from '../../libs/utils/z-response'
 
 const app = new Hono<HonoEnvironment & JwtVariable>()
 
@@ -37,7 +38,7 @@ const getMessagesDto = z.object({
 
 app.post(
   '/:id/messages',
-  zValidator('json', createMessageDto),
+  zValidator('json', createMessageDto, zResponse),
   async (c) => {
     const db = initDbConnect(c.env)
 
@@ -225,7 +226,7 @@ async function completeMessageCreate(
 
 app.get(
   '/:id/messages',
-  zValidator('query', getMessagesDto),
+  zValidator('query', getMessagesDto, zResponse),
   async (c) => {
     const db = initDbConnect(c.env)
     const jwt = c.get('jwt')
