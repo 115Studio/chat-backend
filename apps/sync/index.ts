@@ -5,6 +5,8 @@ import { DbInstance, initDbConnect } from '../../libs/db/init'
 import { Hono } from 'hono'
 import { makeError } from '../../libs/utils/make-error'
 import { ErrorCode } from '../../libs/constants/errors'
+import { sendMessage } from '../../libs/ai/send-message'
+import { AiModel } from '../../libs/constants/ai-model'
 
 export interface WebSocketMeta {
   userId: string
@@ -87,6 +89,25 @@ export class UserDo extends DurableObject<EventEnvironment> {
     this.sessions.delete(ws)
 
     ws.close(code, 'Durable Object is closing WebSocket')
+  }
+
+  async askAi(userId: string, messageId: string, content: string) {
+    const stream = await sendMessage(
+      this.env.AI.gateway('chat-prod'),
+      'haha',
+      AiModel.AnthropicClaudeSonnet4,
+      [ { role: 'user', content } ]
+    )
+
+    if (!stream) return
+
+    const decoder = new TextDecoder()
+
+    // subscribe to stream and broadcast every update
+    for await (const chunk of stream) {
+      const text = decoder.decode(chunk, { stream: true })
+      this.broadcastMessage(userId, text)
+    }
   }
 }
 

@@ -16,6 +16,8 @@ export const sendMessage = async (
   model: AiModel,
   messages: AiMessage[],
 ): Promise<ReadableStream | null> => {
+  console.log('Sending message to AI provider: a', 'Model:', model, 'Messages:', messages)
+
   const response = await gateway.run({
     provider: 'compat',
     endpoint: 'chat/completions',
@@ -27,6 +29,8 @@ export const sendMessage = async (
       messages
     }
   })
+
+  console.log('AI provider response:', response.status, response.statusText)
 
   return response.body
 }

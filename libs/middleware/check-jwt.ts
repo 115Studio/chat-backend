@@ -20,5 +20,7 @@ export const checkJwt = createMiddleware(async (c: Context, next: Next) => {
     throw makeError(ErrorCode.AuthorizationFailed, 403)
   }
 
+  c.set('jwt', valid)
+
   return next()
 })
