@@ -34,13 +34,13 @@ export class UserDo extends DurableObject<EventEnvironment> {
     const websockets = this.ctx.getWebSockets()
 
     for (const ws of websockets) {
-      const meta = ws.deserializeAttachment() as WebSocketMeta
+      const meta = ws.deserializeAttachment()
 
       if (!meta) {
         this.webSocketClose(ws, 1006)
       }
 
-      this.sessions.set(ws, { meta })
+      this.sessions.set(ws, meta)
     }
   }
 
