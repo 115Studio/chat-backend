@@ -15,6 +15,13 @@
       "when": 1749470657624,
       "tag": "0001_polite_ricochet",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1749837487151,
+      "tag": "0002_rare_skin",
+      "breakpoints": true
     }
   ]
 }

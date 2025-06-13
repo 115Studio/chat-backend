@@ -5,15 +5,18 @@ import { DbInstance, initDbConnect } from '../../libs/db/init'
 import { Hono } from 'hono'
 import { makeError } from '../../libs/utils/make-error'
 import { ErrorCode } from '../../libs/constants/errors'
-import { AiMessage, sendMessage } from '../../libs/ai/send-message'
-import { AiModel } from '../../libs/constants/ai-model'
+import { StreamMessageUpdate } from '../../libs/ai/send-message'
 
-import { Channel, Message, messagesTable } from '../../libs/db/schema'
+import { Channel, Message, messagesTable, MessageStage, MessageStages } from '../../libs/db/schema'
 import { WebSocketOpCode } from '../../libs/constants/web-socket-op-code'
 import { AiReturnType } from '../../libs/constants/ai-return-type'
 import { MessageState } from '../../libs/constants/message-state'
 import { eq } from 'drizzle-orm'
 import { askAi } from '../../libs/ai/ask-ai'
+import { snowflake } from '../../libs/utils/snowflake'
+import { MessageStageType } from '../../libs/constants/message-stage-type'
+import { MessageStageContentType } from '../../libs/constants/message-stage-content-type'
+import { AiMessage, messageToAi } from '../../libs/ai/message-to-ai'
 
 export interface WebSocketMeta {
   userId: string
@@ -22,7 +25,7 @@ export interface WebSocketMeta {
 export class UserDo extends DurableObject<EventEnvironment> {
   private sessions: Map<WebSocket, { meta: WebSocketMeta }>
   private db: DbInstance
-  private messages: Map<string, string> = new Map()
+  private messages: Map<string, MessageStages> = new Map()
 
   constructor(ctx: DurableObjectState, env: EventEnvironment) {
     super(ctx, env)
@@ -154,6 +157,13 @@ export class UserDo extends DurableObject<EventEnvironment> {
     })
   }
 
+  ackMessageStageUpdate(userId: string, messageId: string, stageUpdate: StreamMessageUpdate, ts: number) {
+    this.broadcastMessage(userId, {
+      op: WebSocketOpCode.MessageStageUpdate,
+      data: { messageId, stageUpdate, ts }
+    })
+  }
+
   ackMessageDelete(userId: string, messageId: string) {
     this.broadcastMessage(userId, {
       op: WebSocketOpCode.MessageDelete,
@@ -161,83 +171,99 @@ export class UserDo extends DurableObject<EventEnvironment> {
     })
   }
 
-  async complementMessage(userId: string, messageId: string, current: Message, history: Message[]) {
+  async complementMessage(
+    userId: string, messageId: string, current: Message, history: Message[]
+  ): Promise<MessageStages | undefined> {
     const messages: AiMessage[] = [
       {
         role: 'system',
-        content: 'You are a helpful assistant. Please answer the user\'s questions based on the provided context.',
+        content: 'You are a helpful AI assistant with access to tools for image generation (generate_image), web search (web_search_preview), and file analysis. Use these tools when appropriate to provide comprehensive and helpful responses.'
       },
-      ...history
-        .filter(m => m.content)
-        .map(msg => ({
-          role: msg.role,
-          content: msg.content!,
-        })),
+      ...history.map(messageToAi),
     ]
 
     const stream = await askAi<AiReturnType.Stream>(this.env, current.model, messages, AiReturnType.Stream)
 
     if (!stream) {
-      const msg = await this.db
+      const [ msg ] = await this.db
         .update(messagesTable)
         .set({ state: MessageState.Failed })
         .where(eq(messagesTable.id, messageId))
         .returning()
         .execute()
 
-      this.ackMessageUpdate(userId, msg[0])
+      this.ackMessageUpdate(userId, msg)
 
       return
     }
 
-    this.messages.set(messageId, '')
+    this.messages.set(messageId, [])
 
     const reader = stream.getReader()
     let ts = Date.now()
     let lastSaveTime = Date.now()
     const SAVE_INTERVAL = 3000 // 3 seconds
 
-    while (true) {
-      const { done, value } = await reader.read()
-      if (done) break
+    const stageContentMap = new Map<string, MessageStage>()
 
-      const textChunk = value
-      ts = Date.now()
-      this.ackMessageComplement(userId, messageId, textChunk, ts)
-      this.messages.set(messageId, this.messages.get(messageId) + textChunk)
-
-      // persist at least part of the message if DO restarts
-      if (ts - lastSaveTime >= SAVE_INTERVAL) {
-        await this.db
-          .update(messagesTable)
-          .set({
-            content: this.messages.get(messageId) || '',
-            updatedAt: ts,
-          })
-          .where(eq(messagesTable.id, messageId))
-          .execute()
-
-        lastSaveTime = ts
-      }
-    }
-
-    const msg = await this.db
-      .update(messagesTable)
-      .set({
-        state: MessageState.Completed,
-        content: this.messages.get(messageId) || '',
-        updatedAt: ts
-      })
-      .where(eq(messagesTable.id, messageId))
-      .returning()
-      .execute()
-
-    this.messages.delete(messageId)
-
-    this.ackMessageUpdate(userId, msg[0])
+    // while (true) {
+    //   const { done, value } = await reader.read()
+    //   if (done) break
+    //
+    //   ts = Date.now()
+    //
+    //   this.ackMessageStageUpdate(userId, messageId, value, ts)
+    //
+    //   stageContentMap.set(value.id, {
+    //     id: value.id,
+    //     type: value.type,
+    //     content: {
+    //       type: MessageStageContentType.Text,
+    //       value: value.content
+    //     }
+    //   })
+    //
+    //   const currentStages = Array.from(stageContentMap.values())
+    //     .filter(stage => stage.type !== MessageStageType.Think || stage.type === MessageStageType.Think && stage.content?.value !== 'Thinking...');
+    //
+    //   this.messages.set(messageId, currentStages)
+    //
+    //   if (ts - lastSaveTime >= SAVE_INTERVAL) {
+    //     await this.db
+    //       .update(messagesTable)
+    //       .set({
+    //         stages: this.messages.get(messageId) || [],
+    //         updatedAt: ts,
+    //       })
+    //       .where(eq(messagesTable.id, messageId))
+    //       .execute()
+    //
+    //     lastSaveTime = ts
+    //   }
+    // }
+    //
+    // const finalStages = (this.messages.get(messageId) || [])
+    //   .filter(stage => stage.type !== MessageStageType.Think);
+    //
+    // const [ msg ] = await this.db
+    //   .update(messagesTable)
+    //   .set({
+    //     state: MessageState.Completed,
+    //     stages: finalStages,
+    //     updatedAt: ts
+    //   })
+    //   .where(eq(messagesTable.id, messageId))
+    //   .returning()
+    //   .execute()
+    //
+    // this.messages.delete(messageId)
+    //
+    // this.ackMessageUpdate(userId, msg)
+    //
+    // return msg.stages
   }
 
-  getIncompleteMessage(messageId: string): string | undefined {
+  getIncompleteMessage(messageId: string): MessageStages | undefined {
     return this.messages.get(messageId)
   }
 }

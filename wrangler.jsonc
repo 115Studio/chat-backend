@@ -2,7 +2,7 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "chat-backend",
   "main": "apps/index.ts",
-  "compatibility_date": "2025-06-08",
+  "compatibility_date": "2025-05-25",
   "compatibility_flags": [
     "nodejs_compat"
   ],
@@ -44,9 +44,6 @@
       "migrations_dir": "libs/db/migrations/sqlite"
     }
   ],
-  "ai": {
-    "binding": "AI"
-  },
   "observability": {
     "enabled": true,
     "head_sampling_rate": 1

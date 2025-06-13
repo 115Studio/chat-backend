@@ -7,27 +7,52 @@ import { snowflake } from '../../libs/utils/snowflake'
 import { AiModel } from '../../libs/constants/ai-model'
 import { getDo } from '../../libs/utils/get-do'
 import { DbInstance, initDbConnect } from '../../libs/db/init'
-import { Channel, channelsTable, Message, messagesTable } from '../../libs/db/schema'
+import {
+  Channel,
+  channelsTable,
+  Message,
+  messagesTable,
+  MessageStage,
+  MessageStages,
+  ModelSettings,
+  uploadsTable
+} from '../../libs/db/schema'
 import { MagicNumber } from '../../libs/constants/magic-number'
-import { and, eq, gt, lt, desc, ne, inArray } from 'drizzle-orm'
+import { and, desc, eq, gt, inArray, lt } from 'drizzle-orm'
 import { MessageState } from '../../libs/constants/message-state'
 import { MessageRole } from '../../libs/constants/message-role'
 import { makeError } from '../../libs/utils/make-error'
 import { ErrorCode } from '../../libs/constants/errors'
 import { AiReturnType } from '../../libs/constants/ai-return-type'
 import { askAi } from '../../libs/ai/ask-ai'
-import { AiMessage } from '../../libs/ai/send-message'
 import { UserDo } from '../sync'
 import { JwtPayload } from '../../libs/crypto/jwt'
 import { zResponse } from '../../libs/utils/z-response'
+import { MessageStageType } from '../../libs/constants/message-stage-type'
+import { MessageStageContentType } from '../../libs/constants/message-stage-content-type'
+import { AiModelFlag } from '../../libs/constants/ai-model-flag'
+import { stagesToFeatures } from '../../libs/ai/stages-to-features'
+import { modelToFeatures } from '../../libs/ai/model-to-features'
 
 const app = new Hono<HonoEnvironment & JwtVariable>()
 
 app.use(checkJwt)
 
 const createMessageDto = z.object({
-  content: z.string().min(1).max(1000),
-  model: z.enum(AiModel)
+  stages: z.array(
+    z.object({
+      type: z.enum(MessageStageType),
+      content: z.object({
+        type: z.enum(MessageStageContentType),
+        value: z.string().min(1).max(1000)
+      })
+    })
+  ),
+  model: z.object({
+    id: z.enum(AiModel),
+    key: z.string().optional(),
+    flags: z.array(z.enum(AiModelFlag))
+  })
 })
 
 const getMessagesDto = z.object({
@@ -42,16 +67,108 @@ app.post(
   async (c) => {
     const db = initDbConnect(c.env)
 
-    const { content, model } = c.req.valid('json')
+    let { stages: stagesRaw, model } = c.req.valid('json')
+    model = model satisfies ModelSettings
+
+    const stageFeatures = stagesToFeatures(stagesRaw as MessageStages)
+    const modelFeatures = modelToFeatures(model.id)
+
+    if (!modelFeatures.some(f => stageFeatures.includes(f))) {
+      throw makeError(ErrorCode.UnsupportedModelFeatures, 400)
+    }
 
     const jwt = c.get('jwt')
+
+    const allowedUserStages = [
+      MessageStageType.Text,
+      MessageStageType.Vision,
+      MessageStageType.Pdf,
+      MessageStageType.File,
+      MessageStageType.Audio,
+    ]
+
+    const urlStages = [
+      MessageStageType.Vision,
+      MessageStageType.Pdf,
+      MessageStageType.File,
+      MessageStageType.Audio,
+    ]
+
+    const filesStages: typeof stagesRaw = []
+    const stages: Required<MessageStages> = []
+
+    for (const stage of stagesRaw) {
+      if (!allowedUserStages.includes(stage.type)) {
+        throw makeError(ErrorCode.BadRequest, 400)
+      }
+
+      const isUrl = urlStages.includes(stage.type)
+
+      if (isUrl) {
+        filesStages.push(stage)
+      } else {
+        (stage as MessageStage).id = snowflake()
+        stages.push(stage as Required<MessageStage>)
+      }
+    }
+
+    const uploads = filesStages.length ? await db
+      .select()
+      .from(uploadsTable)
+      .where(
+        and(
+          eq(uploadsTable.userId, jwt.id),
+          inArray(uploadsTable.id, filesStages.map(s => s.content.value))
+        )
+      )
+      .execute() : []
+
+    for (const stage of filesStages) {
+      const upload = uploads.find(u => u.id === stage.content.value)
+
+      if (!upload) {
+        throw makeError(ErrorCode.UnknownUpload, 404)
+      }
+
+      if (upload.userId !== jwt.id) {
+        throw makeError(ErrorCode.UnknownUpload, 404)
+      }
+
+      switch (stage.type) {
+        case MessageStageType.Vision:
+          if (!upload.mime.includes('image/'))
+            throw makeError(ErrorCode.UploadTypeMismatch, 400)
+          break
+
+        case MessageStageType.Pdf:
+          if (!upload.mime.includes('application/pdf'))
+            throw makeError(ErrorCode.UploadTypeMismatch, 400)
+          break
+
+        case MessageStageType.File:
+          if (!upload.mime.includes('text/plain'))
+            throw makeError(ErrorCode.UploadTypeMismatch, 400)
+          break
+
+        case MessageStageType.Audio:
+          if (!upload.mime.includes('audio/'))
+            throw makeError(ErrorCode.UploadTypeMismatch, 400)
+          break
+      }
+
+      stage.content.value = upload.url;
+
+      (stage as MessageStage).id = snowflake()
+
+      stages.push(stage as Required<MessageStage>)
+    }
 
     const { doStub } = getDo(c.env, c.var.jwt.id)
 
     let channelId = c.req.param('id')
     const isNew = channelId === '@new'
 
-    let channels: Channel[] = []
+    let channels: Channel[]
 
     if (isNew) {
       channelId = snowflake()
@@ -126,9 +243,9 @@ app.post(
 
           state: MessageState.Completed,
           role: MessageRole.User,
-          model,
 
-          content,
+          model,
+          stages,
 
           createdAt: Date.now()
         })
@@ -145,6 +262,8 @@ app.post(
           role: MessageRole.Assistant,
           model,
 
+          stages: [],
+
           createdAt: Date.now() + 1
         })
         .returning()
@@ -158,7 +277,7 @@ app.post(
         db,
         channel,
         jwt,
-        content,
+        stages,
         systemMessage,
         userMessage,
         history,
@@ -180,7 +299,7 @@ async function completeMessageCreate(
   db: DbInstance,
   channel: Channel,
   jwt: JwtPayload,
-  content: string,
+  stages: Required<MessageStages>,
   systemMessage: Message,
   userMessage: Message,
   history: Message[],
@@ -189,25 +308,56 @@ async function completeMessageCreate(
 ) {
   if (isNew) {
     await doStub.ackChannelCreate(jwt.id, channel)
+  }
 
-    const summarizeSystemMessage: AiMessage[] = [
-      {
-        role: 'system',
-        content: `You are a helpful assistant. Your task is to summarize the message and provide ` +
-          `a response based on the user's message with ONLY 1-3 words long. Always use the same language as the user. ` +
-          `Do not include any additional information or explanations. ` +
-          `If the conversation is empty, just respond with "New chat"`
-      },
-      {
-        role: 'user',
-        content,
-      }
-    ]
+  await doStub.ackMessageCreate(jwt.id, userMessage)
+  await doStub.ackMessageCreate(jwt.id, systemMessage)
 
-    const newName = await askAi<AiReturnType.Complete>(
-      env, AiModel.GoogleGemini20Flash, summarizeSystemMessage, AiReturnType.Complete
-    ) ?? 'New chat'
+  const complementPromise = doStub.complementMessage(jwt.id, systemMessage.id, userMessage, history)
 
+  const textContentStage = stages.find(s => s.type === MessageStageType.Text)
+  const textContent = textContentStage?.content?.value
+
+  const summarize = async (content: string) => {
+    // const summarizeSystemMessage: AiMessage[] = [
+    //   {
+    //     role: 'system',
+    //     content: [
+    //       {
+    //         id: snowflake(),
+    //         type: MessageStageType.Text,
+    //         content: {
+    //           type: MessageStageContentType.Text,
+    //           value: `You are a helpful assistant. Your task is to summarize the message and provide ` +
+    //             `a response based on the user's message with ONLY 1-3 words long. Always use the same language as the user. ` +
+    //             `Do not include any additional information or explanations. ` +
+    //             `If the conversation is empty, just respond with "New chat"`
+    //         }
+    //       }
+    //     ]
+    //   },
+    //   {
+    //     role: 'user',
+    //     content: [
+    //       {
+    //         id: snowflake(),
+    //         type: MessageStageType.Text,
+    //         content: {
+    //           type: MessageStageContentType.Text,
+    //           value: content
+    //         }
+    //       }
+    //     ]
+    //   }
+    // ]
+    //
+    // return await askAi<AiReturnType.Complete>(
+    //   env, { id: AiModel.GoogleGemini20Flash }, summarizeSystemMessage, AiReturnType.Complete
+    // ) ?? 'New chat'
+    return '123'
+  }
+
+  const update = async (newName: string) => {
     const [ newChannel ] = await db
       .update(channelsTable)
       .set({ name: newName.trim() })
@@ -218,10 +368,35 @@ async function completeMessageCreate(
     await doStub.ackChannelUpdate(jwt.id, newChannel)
   }
 
-  await doStub.ackMessageCreate(jwt.id, userMessage)
-  await doStub.ackMessageCreate(jwt.id, systemMessage)
+  const summarizeAndUpdate = async (content: string) => {
+    return update(await summarize(content))
+  }
 
-  return doStub.complementMessage(jwt.id, systemMessage.id, userMessage, history)
+  // Separate to avoid blocking the response
+  if (isNew) {
+    if (textContent) {
+      await summarizeAndUpdate(textContent)
+    }
+  }
+
+  const result = await complementPromise
+
+  if (isNew && !textContent) {
+    if (!result) {
+      return update('New chat')
+    }
+
+    const resultTextStage = result.find(s => s.type === MessageStageType.Text)
+    const resultText = resultTextStage?.content?.value
+
+    if (resultText) {
+      return summarizeAndUpdate(resultText)
+    } else {
+      return update('New chat')
+    }
+  }
+
+  return result
 }
 
 app.get(
@@ -290,10 +465,10 @@ app.get(
 
     for (const m of messages) {
       if (m.role === MessageRole.Assistant && m.state !== MessageState.Completed && m.state !== MessageState.Failed) {
-        const txt = await doStub.getIncompleteMessage(m.id)
+        const stages = await doStub.getIncompleteMessage(m.id)
 
-        if (txt) {
-          m.content = txt
+        if (stages) {
+          m.stages = stages
           m.updatedAt = Date.now()
         } else {
           m.state = MessageState.Completed

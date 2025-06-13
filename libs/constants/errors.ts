@@ -6,6 +6,17 @@ export enum ErrorCode {
   ThirdPartyFailure,
   RateLimitExceeded,
   UnknownChannel,
+  UnknownUser,
+  UnknownMessageStage,
+  UnsupportedModelFeatures,
+  UnsupportedStage,
+  ProviderAuthMissing,
+  UploadTooLarge = 2000,
+  UnsupportedFileType,
+  UploadFailed,
+  UploadLimitExceeded,
+  UnknownUpload,
+  UploadTypeMismatch,
 }
 
 export const errorMessages: Record<ErrorCode, string> = {
@@ -16,4 +27,16 @@ export const errorMessages: Record<ErrorCode, string> = {
   [ErrorCode.ThirdPartyFailure]: 'Third-party service failure',
   [ErrorCode.RateLimitExceeded]: 'Rate limit exceeded',
   [ErrorCode.UnknownChannel]: 'Unknown channel',
+  [ErrorCode.UnknownUser]: 'Unknown user',
+  [ErrorCode.UnknownMessageStage]: 'Unknown message stage',
+  [ErrorCode.UnsupportedModelFeatures]: 'Unsupported model features',
+  [ErrorCode.UnsupportedStage]: 'Unsupported stage',
+  [ErrorCode.ProviderAuthMissing]: 'Provider authentication missing',
+
+  [ErrorCode.UploadTooLarge]: 'Upload too large',
+  [ErrorCode.UnsupportedFileType]: 'Unsupported file type',
+  [ErrorCode.UploadFailed]: 'Upload failed',
+  [ErrorCode.UploadLimitExceeded]: 'Upload limit exceeded',
+  [ErrorCode.UnknownUpload]: 'Unknown upload',
+  [ErrorCode.UploadTypeMismatch]: 'Upload type mismatch',
 }

@@ -11,3 +11,7 @@ export const makeError = (code: ErrorCode, http: StatusCode) => {
     message: `[${code}] ${errorMessages[code]}`,
   })
 }
+
+export const makeTextError = (code: ErrorCode) => {
+  return `[${code}]: ${errorMessages[code]}`
+}
