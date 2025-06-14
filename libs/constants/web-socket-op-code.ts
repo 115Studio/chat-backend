@@ -1,11 +1,12 @@
 /*
-* Websocket operation codes are used only for server-to-client communication.
-* */
+ * Websocket operation codes are used only for server-to-client communication.
+ * */
 export enum WebSocketOpCode {
   Heartbeat,
   ForceClientRefresh = 1000,
   UserSettingsUpdate,
   UserPlanUpdate,
+  ServerHello,
 
   MessageCreate = 10100,
   MessageUpdate,
@@ -16,4 +17,14 @@ export enum WebSocketOpCode {
   ChannelCreate = 10110,
   ChannelUpdate,
   ChannelDelete,
+
+  UserUpdate = 10120,
+
+  PersonalityCreated = 10130,
+  PersonalityUpdated,
+  PersonalityDeleted,
+
+  BYOKCreated = 10140,
+  BYOKUpdated,
+  BYOKDeleted,
 }

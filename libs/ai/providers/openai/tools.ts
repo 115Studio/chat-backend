@@ -18,9 +18,7 @@ export const imageGenDto = z.object({
 
 export type ImageGenerationInput = z.infer<typeof imageGenDto>
 
-export const image = async (
-  model: ModelSettings, input: ImageGenerationInput
-): Promise<Uint8Array[] | undefined> => {
+export const image = async (model: ModelSettings, input: ImageGenerationInput): Promise<Uint8Array[] | undefined> => {
   try {
     const validatedInput = imageGenDto.parse(input)
 
@@ -36,16 +34,14 @@ export const image = async (
       return
     }
 
-    return images.map(i => i.uint8Array)
+    return images.map((i) => i.uint8Array)
   } catch (e) {
     console.error('Image generation error:', e)
     return
   }
 }
 
-export const text = async (
-  model: ModelSettings, messages: AiMessage[], id?: string
-): Promise<AiResponse> => {
+export const text = async (model: ModelSettings, messages: AiMessage[], id?: string): Promise<AiResponse> => {
   const provider = createOpenAI({ apiKey: model.key })
 
   const reasoningEffort = flagsToEffort(model.flags || [])
@@ -53,7 +49,7 @@ export const text = async (
   const imageForced = model.flags?.includes(AiModelFlag.ImageGen)
   const searchForced = model.flags?.includes(AiModelFlag.WebSearch)
 
-  let toolChoice: ({ type: 'tool', toolName: AiToolName.ImageGen | AiToolName.WebSearch }) | undefined
+  let toolChoice: { type: 'tool'; toolName: AiToolName.ImageGen | AiToolName.WebSearch } | undefined
 
   switch (true) {
     case !!imageForced:
@@ -66,7 +62,7 @@ export const text = async (
 
   const response = streamText({
     model: provider.responses(model.id),
-    messages: id ? [ messages[messages.length - 1] ] : messages,
+    messages: id ? [messages[messages.length - 1]] : messages,
     tools: {
       [AiToolName.WebSearch]: openai.tools.webSearchPreview(),
       [AiToolName.ImageGen]: tool({
@@ -78,20 +74,20 @@ export const text = async (
             throw new Error('Image generation failed or returned no images')
           }
 
-          return images.map(img => ({
+          return images.map((img) => ({
             type: 'image',
             data: img,
           }))
         },
-      })
+      }),
     },
     toolChoice,
     providerOptions: {
       openai: {
         previousResponseId: id as JSONValue,
         reasoningEffort: reasoningEffort as JSONValue,
-      }
-    }
+      },
+    },
   })
 
   return response.toDataStreamResponse().body

@@ -7,7 +7,17 @@ import { makeError } from '../../libs/utils/make-error'
 import { ErrorCode } from '../../libs/constants/errors'
 import { StreamMessageUpdate } from '../../libs/ai/send-message'
 
-import { Channel, Message, messagesTable, MessageStage, MessageStages } from '../../libs/db/schema'
+import {
+  BYOK,
+  Channel,
+  Message,
+  messagesTable,
+  MessageStage,
+  MessageStages,
+  Personality,
+  User,
+  usersTable,
+} from '../../libs/db/schema'
 import { WebSocketOpCode } from '../../libs/constants/web-socket-op-code'
 import { AiReturnType } from '../../libs/constants/ai-return-type'
 import { MessageState } from '../../libs/constants/message-state'
@@ -17,6 +27,7 @@ import { snowflake } from '../../libs/utils/snowflake'
 import { MessageStageType } from '../../libs/constants/message-stage-type'
 import { MessageStageContentType } from '../../libs/constants/message-stage-content-type'
 import { AiMessage, messageToAi } from '../../libs/ai/message-to-ai'
+import { getSystemPrompt } from '../../libs/ai/get-system-prompt'
 
 export interface WebSocketMeta {
   userId: string
@@ -71,6 +82,8 @@ export class UserDo extends DurableObject<EventEnvironment> {
     server.serializeAttachment(attachment)
     this.sessions.set(server, attachment)
 
+    this.serverHello(server)
+
     return new Response(null, {
       status: 101,
       webSocket: client,
@@ -89,6 +102,32 @@ export class UserDo extends DurableObject<EventEnvironment> {
   //   })
   // }
 
+  async serverHello(ws: WebSocket) {
+    const user = this.sessions.get(ws)?.meta.userId!
+
+    const [userData] = await this.db.select().from(usersTable).where(eq(usersTable.id, user)).execute()
+
+    if (!userData) {
+      this.webSocketClose(ws, 1006)
+      return
+    }
+
+    ws.send(
+      JSON.stringify({
+        op: WebSocketOpCode.ServerHello,
+        data: {
+          user: {
+            id: userData.id,
+            name: userData.name,
+            defaultModel: userData.defaultModel,
+            displayModels: userData.displayModels,
+          },
+          ts: Date.now(),
+        },
+      }),
+    )
+  }
+
   broadcastMessage(userId: string, message: any) {
     if (typeof message !== 'string') message = JSON.stringify(message)
 
@@ -101,10 +140,7 @@ export class UserDo extends DurableObject<EventEnvironment> {
     })
   }
 
-  webSocketClose(
-    ws: WebSocket,
-    code: number,
-  ) {
+  webSocketClose(ws: WebSocket, code: number) {
     this.sessions.delete(ws)
 
     try {
@@ -117,7 +153,7 @@ export class UserDo extends DurableObject<EventEnvironment> {
   ackChannelCreate(userId: string, channel: Channel) {
     this.broadcastMessage(userId, {
       op: WebSocketOpCode.ChannelCreate,
-      data: { channel }
+      data: { channel },
     })
   }
 
@@ -125,67 +161,135 @@ export class UserDo extends DurableObject<EventEnvironment> {
     console.log('ackChannelUpdate', userId, channel.id)
     this.broadcastMessage(userId, {
       op: WebSocketOpCode.ChannelUpdate,
-      data: { channel }
+      data: {},
     })
   }
 
   ackChannelDelete(userId: string, channelId: string) {
     this.broadcastMessage(userId, {
       op: WebSocketOpCode.ChannelDelete,
-      data: { channelId }
+      data: { channelId },
     })
   }
 
   ackMessageCreate(userId: string, message: Message) {
     this.broadcastMessage(userId, {
       op: WebSocketOpCode.MessageCreate,
-      data: { message }
+      data: { message },
     })
   }
 
   ackMessageUpdate(userId: string, message: Message) {
     this.broadcastMessage(userId, {
       op: WebSocketOpCode.MessageUpdate,
-      data: { message }
+      data: { message },
     })
   }
 
   ackMessageComplement(userId: string, messageId: string, chunk: string, ts: number) {
     this.broadcastMessage(userId, {
       op: WebSocketOpCode.MessageComplement,
-      data: { messageId, chunk, ts }
+      data: { messageId, chunk, ts },
     })
   }
 
-  ackMessageStageUpdate(userId: string, messageId: string, stageUpdate: StreamMessageUpdate, ts: number) {
+  ackMessageStageUpdate(
+    userId: string,
+    messageId: string,
+    channelId: string,
+    stageUpdate: StreamMessageUpdate,
+    ts: number,
+  ) {
     this.broadcastMessage(userId, {
       op: WebSocketOpCode.MessageStageUpdate,
-      data: { messageId, stageUpdate, ts }
+      data: { messageId, channelId, stageUpdate, ts },
     })
   }
 
   ackMessageDelete(userId: string, messageId: string) {
     this.broadcastMessage(userId, {
       op: WebSocketOpCode.MessageDelete,
-      data: { messageId }
+      data: { messageId },
+    })
+  }
+
+  ackUserUpdate(userId: string, user: User) {
+    this.broadcastMessage(userId, {
+      op: WebSocketOpCode.UserUpdate,
+      data: { user },
+    })
+  }
+
+  ackPersonalityCreated(userId: string, personality: Personality) {
+    this.broadcastMessage(userId, {
+      op: WebSocketOpCode.PersonalityCreated,
+      data: { personality },
+    })
+  }
+
+  ackPersonalityUpdated(userId: string, personality: Personality) {
+    this.broadcastMessage(userId, {
+      op: WebSocketOpCode.PersonalityUpdated,
+      data: { personality },
+    })
+  }
+
+  ackPersonalityDeleted(userId: string, personalityId: string) {
+    this.broadcastMessage(userId, {
+      op: WebSocketOpCode.PersonalityDeleted,
+      data: { personalityId },
+    })
+  }
+
+  ackBYOKCreated(userId: string, byok: BYOK) {
+    this.broadcastMessage(userId, {
+      op: WebSocketOpCode.BYOKCreated,
+      data: { byok },
+    })
+  }
+
+  ackBYOKUpdated(userId: string, byok: BYOK) {
+    this.broadcastMessage(userId, {
+      op: WebSocketOpCode.BYOKUpdated,
+      data: { byok },
+    })
+  }
+
+  ackBYOKDeleted(userId: string, byokId: string) {
+    this.broadcastMessage(userId, {
+      op: WebSocketOpCode.BYOKDeleted,
+      data: { byokId },
     })
   }
 
   async complementMessage(
-    userId: string, messageId: string, current: Message, history: Message[]
+    userId: string,
+    messageId: string,
+    channelId: string,
+    current: Message,
+    history: Message[],
+    personalityPrompt: string | undefined,
+    byoks: BYOK[] = [],
   ): Promise<MessageStages | undefined> {
     const messages: AiMessage[] = [
       {
         role: 'system',
-        content: 'You are a helpful AI assistant with access to tools for image generation (generate_image), web search (web_search_preview), and file analysis. Use these tools when appropriate to provide comprehensive and helpful responses.'
+        content: getSystemPrompt(personalityPrompt),
       },
       ...history.map(messageToAi),
     ]
 
-    const stream = await askAi<AiReturnType.Stream>(this.env, current.model, messages, userId, AiReturnType.Stream)
+    const stream = await askAi<AiReturnType.Stream>(
+      this.env,
+      current.model,
+      messages,
+      userId,
+      byoks,
+      AiReturnType.Stream,
+    )
 
     if (!stream) {
-      const [ msg ] = await this.db
+      const [msg] = await this.db
         .update(messagesTable)
         .set({ state: MessageState.Failed })
         .where(eq(messagesTable.id, messageId))
@@ -214,7 +318,7 @@ export class UserDo extends DurableObject<EventEnvironment> {
 
       if (!value) continue
 
-      this.ackMessageStageUpdate(userId, messageId, value, ts)
+      this.ackMessageStageUpdate(userId, channelId, messageId, value, ts)
 
       let stage = stages.get(value.id)
 
@@ -254,12 +358,12 @@ export class UserDo extends DurableObject<EventEnvironment> {
       }
     }
 
-    const [ msg ] = await this.db
+    const [msg] = await this.db
       .update(messagesTable)
       .set({
         state: MessageState.Completed,
         stages: Array.from(stages.values()),
-        updatedAt: ts
+        updatedAt: ts,
       })
       .where(eq(messagesTable.id, messageId))
       .returning()

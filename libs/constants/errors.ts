@@ -17,6 +17,12 @@ export enum ErrorCode {
   UploadLimitExceeded,
   UnknownUpload,
   UploadTypeMismatch,
+
+  BYOKNotFound = 3000,
+  BYOKModelAlreadyUsed,
+
+  PersonalityNotFound = 4000,
+  PersonalityNameIsClaimed,
 }
 
 export const errorMessages: Record<ErrorCode, string> = {
@@ -39,4 +45,10 @@ export const errorMessages: Record<ErrorCode, string> = {
   [ErrorCode.UploadLimitExceeded]: 'Upload limit exceeded',
   [ErrorCode.UnknownUpload]: 'Unknown upload',
   [ErrorCode.UploadTypeMismatch]: 'Upload type mismatch',
+
+  [ErrorCode.BYOKNotFound]: 'BYOK not found',
+  [ErrorCode.BYOKModelAlreadyUsed]: 'One or more models are already in use by another BYOK.',
+
+  [ErrorCode.PersonalityNotFound]: 'Personality not found',
+  [ErrorCode.PersonalityNameIsClaimed]: 'This personality name is already claimed',
 }

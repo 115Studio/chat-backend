@@ -3,7 +3,7 @@ import { AiProvider } from '../constants/ai-provider'
 import { EventEnvironment } from '../../environment'
 import { modelToProvider } from './model-to-provider'
 import { openai } from './providers/openai'
-import { MessageStage, MessageStages, ModelSettings } from '../db/schema'
+import { BYOK, MessageStage, ModelSettings } from '../db/schema'
 import { mergeModelAuth } from '../constants/merge-model-auth'
 import { MessageStageType } from '../constants/message-stage-type'
 import { snowflake } from '../utils/snowflake'
@@ -22,27 +22,34 @@ export const sendMessage = async (
   model: ModelSettings,
   messages: AiMessage[],
   userId: string,
+  byoks: BYOK[] = [],
 ): Promise<ReadableStream<StreamMessageUpdate> | null> => {
   const provider = modelToProvider(model.id)
+
+  const keyForModel = byoks.find((byok) => byok.models.includes(model.id!))?.key
 
   let stream: ReadableStream<any> | null = null
 
   switch (provider) {
     case AiProvider.Anthropic:
-      stream = await anthropic(mergeModelAuth(model, env.ANTHROPIC_AUTH), messages)
+      stream = await anthropic(mergeModelAuth(model, keyForModel ?? env.ANTHROPIC_AUTH), messages)
       break
 
     case AiProvider.GoogleAiStudio:
-      stream = await google(mergeModelAuth(model, env.GOOGLE_AI_AUTH), messages)
+      stream = await google(mergeModelAuth(model, keyForModel ?? env.GOOGLE_AI_AUTH), messages)
       break
 
     case AiProvider.OpenAi:
-      stream = await openai(mergeModelAuth(model, env.OPENAI_AUTH), messages)
+      stream = await openai(mergeModelAuth(model, keyForModel ?? env.OPENAI_AUTH), messages)
       break
 
     default:
     case AiProvider.UnknownToGoogleAi:
-      stream = await google(mergeModelAuth({ id: AiModel.GoogleGemini20Flash }, env.GOOGLE_AI_AUTH), messages)
+      const googleKey = byoks.find((byok) => byok.models.includes(AiModel.GoogleGemini20Flash))?.key
+      stream = await google(
+        mergeModelAuth({ id: AiModel.GoogleGemini20Flash }, googleKey ?? env.GOOGLE_AI_AUTH),
+        messages,
+      )
       break
   }
 
@@ -105,9 +112,9 @@ export const sendMessage = async (
           }
 
           if (needToParse) {
-            const result = stage.content!.value!
-              .split('::')
-              .find(s => s.startsWith('result '))!
+            const result = stage
+              .content!.value!.split('::')
+              .find((s) => s.startsWith('result '))!
               .substring(6)
               .trim()
 
@@ -115,40 +122,44 @@ export const sendMessage = async (
             console.log('stage', messageType, ids, callIdToType)
 
             switch (messageType) {
-              case MessageStageType.VisionGen: {
-                parsed = parsed as [ { data: object, type: 'image' | unknown } ]
+              case MessageStageType.VisionGen:
+                {
+                  parsed = parsed as [{ data: object; type: 'image' | unknown }]
 
-                // Convert the result images to a Uint8Array and upload to cdn
-                for (const image of parsed) {
-                  if (image.type !== 'image') {
-                    continue
-                  }
-
-                  if (image.data && typeof image.data === 'object') {
-                    const ab = jsonBytesToArrayBuffer(image.data)
-
-                    const dataOrError = await upload(env, userId, ab)
-
-                    if (typeof dataOrError === 'string') {
-                      console.error('Upload error:', dataOrError)
+                  // Convert the result images to a Uint8Array and upload to cdn
+                  for (const image of parsed) {
+                    if (image.type !== 'image') {
                       continue
                     }
 
-                    controller.enqueue({
-                      id,
-                      type: messageType,
-                      content: {
-                        type: MessageStageContentType.Vision,
-                        value: dataOrError.url
+                    if (image.data && typeof image.data === 'object') {
+                      const ab = jsonBytesToArrayBuffer(image.data)
+
+                      const dataOrError = await upload(env, userId, ab)
+
+                      if (typeof dataOrError === 'string') {
+                        console.error('Upload error:', dataOrError)
+                        continue
                       }
-                    } as StreamMessageUpdate)
+
+                      controller.enqueue({
+                        id,
+                        type: messageType,
+                        content: {
+                          type: MessageStageContentType.Vision,
+                          value: dataOrError.url,
+                        },
+                      } as StreamMessageUpdate)
+                    }
                   }
                 }
-              } break
+                break
 
-              case MessageStageType.WebSearch: {
-                // TODO
-              } break
+              case MessageStageType.WebSearch:
+                {
+                  // TODO
+                }
+                break
 
               case MessageStageType.AudioGen:
                 // TODO
@@ -159,7 +170,7 @@ export const sendMessage = async (
             controller.enqueue({
               ...stage,
               id,
-              type: messageType
+              type: messageType,
             } as StreamMessageUpdate)
           }
         }
@@ -169,6 +180,6 @@ export const sendMessage = async (
       } finally {
         reader.releaseLock()
       }
-    }
+    },
   })
 }

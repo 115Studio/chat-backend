@@ -8,6 +8,8 @@ import { AiModel } from '../../libs/constants/ai-model'
 import { getDo } from '../../libs/utils/get-do'
 import { DbInstance, initDbConnect } from '../../libs/db/init'
 import {
+  BYOK,
+  BYOKTable,
   Channel,
   channelsTable,
   Message,
@@ -15,7 +17,8 @@ import {
   MessageStage,
   MessageStages,
   ModelSettings,
-  uploadsTable
+  personalityTable,
+  uploadsTable,
 } from '../../libs/db/schema'
 import { MagicNumber } from '../../libs/constants/magic-number'
 import { and, desc, eq, gt, inArray, lt } from 'drizzle-orm'
@@ -45,255 +48,256 @@ const createMessageDto = z.object({
       type: z.enum(MessageStageType),
       content: z.object({
         type: z.enum(MessageStageContentType),
-        value: z.string().min(1).max(1000)
-      })
-    })
+        value: z.string().min(1).max(1000),
+      }),
+    }),
   ),
   model: z.object({
     id: z.enum(AiModel),
     key: z.string().optional(),
-    flags: z.array(z.enum(AiModelFlag))
-  })
+    flags: z.array(z.enum(AiModelFlag)),
+  }),
+  personalityId: z.string().optional(),
 })
 
 const getMessagesDto = z.object({
   from: z.string().optional(),
   to: z.string().optional(),
-  limit: z.number().min(25).max(100).default(50)
+  limit: z.number().min(25).max(100).default(50),
 })
 
-app.post(
-  '/:id/messages',
-  zValidator('json', createMessageDto, zResponse),
-  async (c) => {
-    const db = initDbConnect(c.env)
+const updateChannelDto = z.object({
+  name: z.string().min(1).max(100),
+})
 
-    let { stages: stagesRaw, model } = c.req.valid('json')
-    model = model satisfies ModelSettings
+app.post('/:id/messages', zValidator('json', createMessageDto, zResponse), async (c) => {
+  const db = initDbConnect(c.env)
 
-    const stageFeatures = stagesToFeatures(stagesRaw as MessageStages)
-    const modelFeatures = modelToFeatures(model.id)
+  let { stages: stagesRaw, model, personalityId } = c.req.valid('json')
+  model = model satisfies ModelSettings
 
-    if (!modelFeatures.some(f => stageFeatures.includes(f))) {
-      throw makeError(ErrorCode.UnsupportedModelFeatures, 400)
+  const stageFeatures = stagesToFeatures(stagesRaw as MessageStages)
+  const modelFeatures = modelToFeatures(model.id)
+
+  if (!modelFeatures.some((f) => stageFeatures.includes(f))) {
+    throw makeError(ErrorCode.UnsupportedModelFeatures, 400)
+  }
+
+  const jwt = c.get('jwt')
+
+  const allowedUserStages = [
+    MessageStageType.Text,
+    MessageStageType.Vision,
+    MessageStageType.Pdf,
+    MessageStageType.File,
+    MessageStageType.Audio,
+  ]
+
+  const urlStages = [MessageStageType.Vision, MessageStageType.Pdf, MessageStageType.File, MessageStageType.Audio]
+
+  const filesStages: typeof stagesRaw = []
+  const stages: Required<MessageStages> = []
+
+  for (const stage of stagesRaw) {
+    if (!allowedUserStages.includes(stage.type)) {
+      throw makeError(ErrorCode.BadRequest, 400)
     }
 
-    const jwt = c.get('jwt')
+    const isUrl = urlStages.includes(stage.type)
 
-    const allowedUserStages = [
-      MessageStageType.Text,
-      MessageStageType.Vision,
-      MessageStageType.Pdf,
-      MessageStageType.File,
-      MessageStageType.Audio,
-    ]
-
-    const urlStages = [
-      MessageStageType.Vision,
-      MessageStageType.Pdf,
-      MessageStageType.File,
-      MessageStageType.Audio,
-    ]
-
-    const filesStages: typeof stagesRaw = []
-    const stages: Required<MessageStages> = []
-
-    for (const stage of stagesRaw) {
-      if (!allowedUserStages.includes(stage.type)) {
-        throw makeError(ErrorCode.BadRequest, 400)
-      }
-
-      const isUrl = urlStages.includes(stage.type)
-
-      if (isUrl) {
-        filesStages.push(stage)
-      } else {
-        (stage as MessageStage).id = snowflake()
-        stages.push(stage as Required<MessageStage>)
-      }
-    }
-
-    const uploads = filesStages.length ? await db
-      .select()
-      .from(uploadsTable)
-      .where(
-        and(
-          eq(uploadsTable.userId, jwt.id),
-          inArray(uploadsTable.id, filesStages.map(s => s.content.value))
-        )
-      )
-      .execute() : []
-
-    for (const stage of filesStages) {
-      const upload = uploads.find(u => u.id === stage.content.value)
-
-      if (!upload) {
-        throw makeError(ErrorCode.UnknownUpload, 404)
-      }
-
-      if (upload.userId !== jwt.id) {
-        throw makeError(ErrorCode.UnknownUpload, 404)
-      }
-
-      switch (stage.type) {
-        case MessageStageType.Vision:
-          if (!upload.mime.includes('image/'))
-            throw makeError(ErrorCode.UploadTypeMismatch, 400)
-          break
-
-        case MessageStageType.Pdf:
-          if (!upload.mime.includes('application/pdf'))
-            throw makeError(ErrorCode.UploadTypeMismatch, 400)
-          break
-
-        case MessageStageType.File:
-          if (!upload.mime.includes('text/plain'))
-            throw makeError(ErrorCode.UploadTypeMismatch, 400)
-          break
-
-        case MessageStageType.Audio:
-          if (!upload.mime.includes('audio/'))
-            throw makeError(ErrorCode.UploadTypeMismatch, 400)
-          break
-      }
-
-      stage.content.value = upload.url;
-
-      (stage as MessageStage).id = snowflake()
-
+    if (isUrl) {
+      filesStages.push(stage)
+    } else {
+      ;(stage as MessageStage).id = snowflake()
       stages.push(stage as Required<MessageStage>)
     }
+  }
 
-    const { doStub } = getDo(c.env, c.var.jwt.id)
-
-    let channelId = c.req.param('id')
-    const isNew = channelId === '@new'
-
-    let channels: Channel[]
-
-    if (isNew) {
-      channelId = snowflake()
-
-      channels = await db
-        .insert(channelsTable)
-        .values({
-          id: channelId,
-          name: `${MagicNumber.NameShowSkeleton}`,
-          ownerId: jwt.id,
-          createdAt: Date.now()
-        })
-        .onConflictDoNothing()
-        .returning()
-        .execute()
-    } else {
-      channels = await db
+  const uploads = filesStages.length
+    ? await db
         .select()
-        .from(channelsTable)
+        .from(uploadsTable)
         .where(
           and(
-            eq(channelsTable.id, channelId),
-            eq(channelsTable.ownerId, jwt.id)
-          )
+            eq(uploadsTable.userId, jwt.id),
+            inArray(
+              uploadsTable.id,
+              filesStages.map((s) => s.content.value),
+            ),
+          ),
         )
         .execute()
+    : []
+
+  for (const stage of filesStages) {
+    const upload = uploads.find((u) => u.id === stage.content.value)
+
+    if (!upload) {
+      throw makeError(ErrorCode.UnknownUpload, 404)
     }
 
-    const channel = channels[0]
-
-    if (!channel) {
-      throw makeError(ErrorCode.UnknownChannel, 404)
+    if (upload.userId !== jwt.id) {
+      throw makeError(ErrorCode.UnknownUpload, 404)
     }
 
-    let history: Message[] = []
+    switch (stage.type) {
+      case MessageStageType.Vision:
+        if (!upload.mime.includes('image/')) throw makeError(ErrorCode.UploadTypeMismatch, 400)
+        break
 
-    if (!isNew) {
-      history = await db
-        .select()
-        .from(messagesTable)
-        .where(
-          and(
-            eq(messagesTable.id, channelId),
-            eq(messagesTable.userId, jwt.id)
-          )
-        )
-        .limit(25)
-        .execute()
+      case MessageStageType.Pdf:
+        if (!upload.mime.includes('application/pdf')) throw makeError(ErrorCode.UploadTypeMismatch, 400)
+        break
+
+      case MessageStageType.File:
+        if (!upload.mime.includes('text/plain')) throw makeError(ErrorCode.UploadTypeMismatch, 400)
+        break
+
+      case MessageStageType.Audio:
+        if (!upload.mime.includes('audio/')) throw makeError(ErrorCode.UploadTypeMismatch, 400)
+        break
     }
 
-    const lastMessage = history[history.length - 1]
+    stage.content.value = upload.url
+    ;(stage as MessageStage).id = snowflake()
 
-    if (
-      lastMessage &&
-      lastMessage.state !== MessageState.Completed &&
-      lastMessage.state !== MessageState.Failed
-    ) {
-      throw makeError(ErrorCode.RateLimitExceeded, 429)
-    }
+    stages.push(stage as Required<MessageStage>)
+  }
 
-    const userMessageId = snowflake(),
-      systemMessageId = snowflake()
+  const { doStub } = getDo(c.env, c.var.jwt.id)
 
-    const [ [ userMessage ], [ systemMessage ] ] = await db.batch([
-      db
-        .insert(messagesTable)
-        .values({
-          id: userMessageId,
-          groupId: userMessageId,
-          channelId,
-          userId: jwt.id,
+  let channelId = c.req.param('id')
+  const isNew = channelId === '@new'
 
-          state: MessageState.Completed,
-          role: MessageRole.User,
+  let channels: Channel[]
 
-          model,
-          stages,
+  if (isNew) {
+    channelId = snowflake()
 
-          createdAt: Date.now()
-        })
-        .returning(),
-      db
-        .insert(messagesTable)
-        .values({
-          id: systemMessageId,
-          groupId: systemMessageId,
-          channelId,
-          userId: jwt.id,
+    channels = await db
+      .insert(channelsTable)
+      .values({
+        id: channelId,
+        name: `${MagicNumber.NameShowSkeleton}`,
+        ownerId: jwt.id,
+        createdAt: Date.now(),
+      })
+      .onConflictDoNothing()
+      .returning()
+      .execute()
+  } else {
+    channels = await db
+      .select()
+      .from(channelsTable)
+      .where(and(eq(channelsTable.id, channelId), eq(channelsTable.ownerId, jwt.id)))
+      .execute()
+  }
 
-          state: MessageState.Created,
-          role: MessageRole.Assistant,
-          model,
+  const channel = channels[0]
 
-          stages: [],
+  if (!channel) {
+    throw makeError(ErrorCode.UnknownChannel, 404)
+  }
 
-          createdAt: Date.now() + 1
-        })
-        .returning()
-    ])
+  let history: Message[] = []
 
-    history.push(userMessage)
+  if (!isNew) {
+    history = await db
+      .select()
+      .from(messagesTable)
+      .where(and(eq(messagesTable.id, channelId), eq(messagesTable.userId, jwt.id)))
+      .limit(25)
+      .execute()
+  }
 
-    c.executionCtx.waitUntil(
-      completeMessageCreate(
-        c.env,
-        db,
-        channel,
-        jwt,
+  const lastMessage = history[history.length - 1]
+
+  if (lastMessage && lastMessage.state !== MessageState.Completed && lastMessage.state !== MessageState.Failed) {
+    throw makeError(ErrorCode.RateLimitExceeded, 429)
+  }
+
+  const userMessageId = snowflake(),
+    systemMessageId = snowflake()
+
+  const [[userMessage], [systemMessage]] = await db.batch([
+    db
+      .insert(messagesTable)
+      .values({
+        id: userMessageId,
+        groupId: userMessageId,
+        channelId,
+        userId: jwt.id,
+
+        state: MessageState.Completed,
+        role: MessageRole.User,
+
+        model,
         stages,
-        systemMessage,
-        userMessage,
-        history,
-        isNew,
-        doStub
-      )
-    )
 
-    return c.json({
-      channelId,
+        createdAt: Date.now(),
+      })
+      .returning(),
+    db
+      .insert(messagesTable)
+      .values({
+        id: systemMessageId,
+        groupId: systemMessageId,
+        channelId,
+        userId: jwt.id,
+
+        state: MessageState.Created,
+        role: MessageRole.Assistant,
+        model,
+
+        stages: [],
+
+        createdAt: Date.now() + 1,
+      })
+      .returning(),
+    db
+      .update(channelsTable)
+      .set({
+        updatedAt: Date.now(),
+      })
+      .where(eq(channelsTable.id, channelId)),
+  ])
+
+  history.push(userMessage)
+
+  const [personality] = personalityId
+    ? await db
+        .select()
+        .from(personalityTable)
+        .where(and(eq(personalityTable.id, personalityId), eq(personalityTable.userId, jwt.id)))
+        .execute()
+    : []
+
+  const byoks = await db.select().from(BYOKTable).where(eq(BYOKTable.userId, jwt.id)).execute()
+
+  c.executionCtx.waitUntil(
+    completeMessageCreate(
+      c.env,
+      db,
       channel,
+      jwt,
+      stages,
+      systemMessage,
       userMessage,
-      systemMessage
-    })
+      history,
+      isNew,
+      personality?.prompt,
+      byoks,
+      doStub,
+    ),
+  )
+
+  return c.json({
+    channelId,
+    channel,
+    userMessage,
+    systemMessage,
   })
+})
 
 async function completeMessageCreate(
   env: EventEnvironment,
@@ -305,7 +309,9 @@ async function completeMessageCreate(
   userMessage: Message,
   history: Message[],
   isNew: boolean,
-  doStub: DurableObjectStub<UserDo>
+  personalityPrompt: string | undefined = undefined,
+  byoks: BYOK[] = [],
+  doStub: DurableObjectStub<UserDo>,
 ) {
   if (isNew) {
     await doStub.ackChannelCreate(jwt.id, channel)
@@ -314,35 +320,49 @@ async function completeMessageCreate(
   await doStub.ackMessageCreate(jwt.id, userMessage)
   await doStub.ackMessageCreate(jwt.id, systemMessage)
 
-  const complementPromise = doStub.complementMessage(jwt.id, systemMessage.id, userMessage, history)
+  const complementPromise = doStub.complementMessage(
+    jwt.id,
+    systemMessage.id,
+    channel.id,
+    userMessage,
+    history,
+    personalityPrompt,
+    byoks,
+  )
 
-  const textContentStage = stages.find(s => s.type === MessageStageType.Text)
+  const textContentStage = stages.find((s) => s.type === MessageStageType.Text)
   const textContent = textContentStage?.content?.value
 
   const summarize = async (content: string) => {
     const summarizeSystemMessage: AiMessage[] = [
       {
         role: 'system',
-        content: `You are a helpful assistant. Your task is to summarize the message and provide ` +
+        content:
+          `You are a helpful assistant. Your task is to summarize the message and provide ` +
           `a response based on the user's message with ONLY 1-3 words long. Always use the same language as the user. ` +
           `Do not include any additional information or explanations. ` +
-          `If the conversation is empty, just respond with "New chat"`
+          `If the conversation is empty, just respond with "New chat"`,
       },
       {
         role: 'user',
         content,
-      }
+      },
     ]
 
     const result = await askAi<AiReturnType.Complete>(
-      env, { id: AiModel.GoogleGemini20Flash }, summarizeSystemMessage, jwt.id, AiReturnType.Complete
+      env,
+      { id: AiModel.GoogleGemini20Flash },
+      summarizeSystemMessage,
+      jwt.id,
+      byoks,
+      AiReturnType.Complete,
     )
 
     if (!result) {
       return 'New chat'
     }
 
-    const resultStage = result.find(r => r.type === MessageStageType.Text)
+    const resultStage = result.find((r) => r.type === MessageStageType.Text)
     const resultText = resultStage?.content?.value
 
     if (!resultText) {
@@ -353,9 +373,9 @@ async function completeMessageCreate(
   }
 
   const update = async (newName: string) => {
-    const [ newChannel ] = await db
+    const [newChannel] = await db
       .update(channelsTable)
-      .set({ name: newName.trim() })
+      .set({ name: newName.trim(), updatedAt: Date.now() })
       .where(eq(channelsTable.id, channel.id))
       .returning()
       .execute()
@@ -381,7 +401,7 @@ async function completeMessageCreate(
       return update('New chat')
     }
 
-    const resultTextStage = result.find(s => s.type === MessageStageType.Text)
+    const resultTextStage = result.find((s) => s.type === MessageStageType.Text)
     const resultText = resultTextStage?.content?.value
 
     if (resultText) {
@@ -394,100 +414,205 @@ async function completeMessageCreate(
   return result
 }
 
-app.get(
-  '/:id/messages',
-  zValidator('query', getMessagesDto, zResponse),
-  async (c) => {
-    const db = initDbConnect(c.env)
-    const jwt = c.get('jwt')
-    const channelId = c.req.param('id')
-    const { from, to, limit } = c.req.valid('query')
+app.get('/:id/messages', zValidator('query', getMessagesDto, zResponse), async (c) => {
+  const db = initDbConnect(c.env)
+  const jwt = c.get('jwt')
+  const channelId = c.req.param('id')
+  const { from, to, limit } = c.req.valid('query')
 
-    const channels = await db
-      .select()
-      .from(channelsTable)
-      .where(
-        and(
-          eq(channelsTable.id, channelId),
-          eq(channelsTable.ownerId, jwt.id)
-        )
-      )
-      .execute()
+  const channels = await db
+    .select()
+    .from(channelsTable)
+    .where(and(eq(channelsTable.id, channelId), eq(channelsTable.ownerId, jwt.id)))
+    .execute()
 
-    const channel = channels[0]
-    if (!channel) {
-      throw makeError(ErrorCode.UnknownChannel, 404)
-    }
-
-    const conditions = [eq(messagesTable.channelId, channelId)]
-
-    if (from) {
-      const fromMessage = await db
-        .select({ createdAt: messagesTable.createdAt })
-        .from(messagesTable)
-        .where(eq(messagesTable.id, from))
-        .execute()
-
-      if (fromMessage[0]) {
-        conditions.push(gt(messagesTable.createdAt, fromMessage[0].createdAt))
-      }
-    }
-
-    if (to) {
-      const toMessage = await db
-        .select({ createdAt: messagesTable.createdAt })
-        .from(messagesTable)
-        .where(eq(messagesTable.id, to))
-        .execute()
-
-      if (toMessage[0]) {
-        conditions.push(lt(messagesTable.createdAt, toMessage[0].createdAt))
-      }
-    }
-
-    const messages = await db
-      .select()
-      .from(messagesTable)
-      .where(and(...conditions))
-      .orderBy(desc(messagesTable.createdAt))
-      .limit(limit)
-      .execute()
-
-    const { doStub } = getDo(c.env, jwt.id)
-
-    const messagesToUpdate: string[] = []
-    const updatedMessages: Message[] = []
-
-    for (const m of messages) {
-      if (m.role === MessageRole.Assistant && m.state !== MessageState.Completed && m.state !== MessageState.Failed) {
-        const stages = await doStub.getIncompleteMessage(m.id)
-
-        if (stages) {
-          m.stages = stages
-          m.updatedAt = Date.now()
-        } else {
-          m.state = MessageState.Completed
-          messagesToUpdate.push(m.id)
-        }
-      }
-
-      updatedMessages.push(m)
-    }
-
-    if (messagesToUpdate.length) {
-      await db
-        .update(messagesTable)
-        .set({ state: MessageState.Completed })
-        .where(
-          inArray(messagesTable.id, messagesToUpdate)
-        )
-        .execute()
-    }
-
-    return c.json({
-      messages: updatedMessages.reverse()
-    })
+  const channel = channels[0]
+  if (!channel) {
+    throw makeError(ErrorCode.UnknownChannel, 404)
   }
-)
+
+  const conditions = [eq(messagesTable.channelId, channelId)]
+
+  if (from) {
+    const fromMessage = await db
+      .select({ createdAt: messagesTable.createdAt })
+      .from(messagesTable)
+      .where(eq(messagesTable.id, from))
+      .execute()
+
+    if (fromMessage[0]) {
+      conditions.push(gt(messagesTable.createdAt, fromMessage[0].createdAt))
+    }
+  }
+
+  if (to) {
+    const toMessage = await db
+      .select({ createdAt: messagesTable.createdAt })
+      .from(messagesTable)
+      .where(eq(messagesTable.id, to))
+      .execute()
+
+    if (toMessage[0]) {
+      conditions.push(lt(messagesTable.createdAt, toMessage[0].createdAt))
+    }
+  }
+
+  const messages = await db
+    .select()
+    .from(messagesTable)
+    .where(and(...conditions))
+    .orderBy(desc(messagesTable.createdAt))
+    .limit(limit)
+    .execute()
+
+  const { doStub } = getDo(c.env, jwt.id)
+
+  const messagesToUpdate: string[] = []
+  const updatedMessages: Message[] = []
+
+  for (const m of messages) {
+    if (m.role === MessageRole.Assistant && m.state !== MessageState.Completed && m.state !== MessageState.Failed) {
+      const stages = await doStub.getIncompleteMessage(m.id)
+
+      if (stages) {
+        m.stages = stages
+        m.updatedAt = Date.now()
+      } else {
+        m.state = MessageState.Completed
+        messagesToUpdate.push(m.id)
+      }
+    }
+
+    updatedMessages.push(m)
+  }
+
+  if (messagesToUpdate.length) {
+    await db
+      .update(messagesTable)
+      .set({ state: MessageState.Completed })
+      .where(inArray(messagesTable.id, messagesToUpdate))
+      .execute()
+  }
+
+  return c.json({
+    messages: updatedMessages.reverse(),
+  })
+})
+
+app.get('/', async (c) => {
+  const db = initDbConnect(c.env)
+  const jwt = c.get('jwt')
+
+  const channels = await db
+    .select()
+    .from(channelsTable)
+    .where(eq(channelsTable.ownerId, jwt.id))
+    .orderBy(channelsTable.updatedAt)
+    .execute()
+
+  return c.json({
+    channels,
+  })
+})
+
+app.patch('/:id', zValidator('json', updateChannelDto, zResponse), async (c) => {
+  const db = initDbConnect(c.env)
+  const jwt = c.get('jwt')
+
+  const channelId = c.req.param('id')
+  const { name } = c.req.valid('json')
+
+  const channels = await db
+    .select()
+    .from(channelsTable)
+    .where(and(eq(channelsTable.id, channelId), eq(channelsTable.ownerId, jwt.id)))
+    .execute()
+
+  const channel = channels[0]
+  if (!channel) {
+    throw makeError(ErrorCode.UnknownChannel, 404)
+  }
+
+  if (channel.name === name.trim())
+    return c.json({
+      channel,
+    })
+
+  const [newChannel] = await db
+    .update(channelsTable)
+    .set({ name: name.trim() })
+    .where(eq(channelsTable.id, channel.id))
+    .returning()
+    .execute()
+
+  const { doStub } = getDo(c.env, jwt.id)
+
+  await doStub.ackChannelUpdate(jwt.id, newChannel)
+
+  return c.json({
+    channel: newChannel,
+  })
+})
+
+app.post('/:id/pin', async (c) => {
+  const db = initDbConnect(c.env)
+  const jwt = c.get('jwt')
+
+  const channelId = c.req.param('id')
+
+  const channels = await db
+    .select()
+    .from(channelsTable)
+    .where(and(eq(channelsTable.id, channelId), eq(channelsTable.ownerId, jwt.id)))
+    .execute()
+
+  const channel = channels[0]
+  if (!channel) {
+    throw makeError(ErrorCode.UnknownChannel, 404)
+  }
+
+  const [newChannel] = await db
+    .update(channelsTable)
+    .set({ isPinned: !channel.isPinned })
+    .where(eq(channelsTable.id, channel.id))
+    .returning()
+    .execute()
+
+  const { doStub } = getDo(c.env, jwt.id)
+
+  await doStub.ackChannelUpdate(jwt.id, newChannel)
+
+  return c.json({
+    channel: newChannel,
+  })
+})
+
+app.delete('/:id', async (c) => {
+  const db = initDbConnect(c.env)
+  const jwt = c.get('jwt')
+
+  const channelId = c.req.param('id')
+
+  const channels = await db
+    .select()
+    .from(channelsTable)
+    .where(and(eq(channelsTable.id, channelId), eq(channelsTable.ownerId, jwt.id)))
+    .execute()
+
+  const channel = channels[0]
+  if (!channel) {
+    throw makeError(ErrorCode.UnknownChannel, 404)
+  }
+
+  await db.delete(channelsTable).where(eq(channelsTable.id, channel.id)).execute()
+
+  const { doStub } = getDo(c.env, jwt.id)
+
+  await doStub.ackChannelDelete(jwt.id, channelId)
+
+  return c.json({
+    success: true,
+  })
+})
 
 export default app

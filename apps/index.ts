@@ -9,6 +9,8 @@ import users from './users'
 import sync, { UserDo } from './sync'
 import channels from './channels'
 import images from './images'
+import personality from './personality'
+import byok from './byok'
 
 const app = new Hono<HonoEnvironment>().basePath('/api/v1')
 
@@ -31,6 +33,8 @@ app.route('/oauth', oauth)
 app.route('/users', users)
 app.route('/sync', sync)
 app.route('/images', images)
+app.route('/personalities', personality)
+app.route('/byok', byok)
 
 export default app
 

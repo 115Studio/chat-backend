@@ -1,7 +1,7 @@
 import { AiReturnType } from '../constants/ai-return-type'
 import { sendMessage, StreamMessageUpdate } from './send-message'
 import { EventEnvironment } from '../../environment'
-import { MessageStage, MessageStages, ModelSettings } from '../db/schema'
+import { BYOK, MessageStage, MessageStages, ModelSettings } from '../db/schema'
 import { MessageStageType } from '../constants/message-stage-type'
 import { AiMessage } from './message-to-ai'
 
@@ -10,16 +10,12 @@ export const askAi = async <R extends AiReturnType>(
   model: ModelSettings,
   messages: AiMessage[],
   userId: string,
+  byoks: BYOK[] = [],
   returnType: AiReturnType = AiReturnType.Stream,
 ): Promise<(R extends AiReturnType.Stream ? ReadableStream<StreamMessageUpdate> : MessageStages) | null> => {
   console.log('Asking AI with model:', model)
 
-  const stream = await sendMessage(
-    env,
-    model,
-    messages,
-    userId,
-  )
+  const stream = await sendMessage(env, model, messages, userId, byoks)
 
   if (!stream) return null
 

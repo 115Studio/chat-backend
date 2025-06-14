@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX `personality_name_index` ON `personality` (`name`);
