@@ -69,30 +69,18 @@ app.post('/', zValidator('json', CreatePersonalityDto, zResponse), async (c) => 
 
   const { name, prompt, isDefault } = c.req.valid('json')
 
-  let personality = null
-
-  try {
-    const [dbPersonality] = await db
-      .insert(personalityTable)
-      .values({
-        id: snowflake(),
-        userId: jwt.id,
-        name,
-        prompt,
-        isDefault,
-        createdAt: Date.now(),
-        updatedAt: null,
-      })
-      .returning()
-
-    personality = dbPersonality
-  } catch (e: any) {
-    if (e instanceof Error && e.cause?.toString().includes('UNIQUE constraint'))
-      throw makeError(ErrorCode.PersonalityNameIsClaimed, 409)
-
-    console.error(e)
-    throw makeError(ErrorCode.UnknownError, 500)
-  }
+  const [personality] = await db
+    .insert(personalityTable)
+    .values({
+      id: snowflake(),
+      userId: jwt.id,
+      name,
+      prompt,
+      isDefault,
+      createdAt: Date.now(),
+      updatedAt: null,
+    })
+    .returning()
 
   const { doStub } = getDo(c.env, jwt.id)
 
@@ -127,33 +115,41 @@ app.patch(':id', zValidator('json', UpdatePersonalityDto, zResponse), async (c) 
 
   const { name, prompt, isDefault } = c.req.valid('json')
 
-  let personality = null
-
-  try {
-    const [dbPersonality] = await db
-      .update(personalityTable)
-      .set({
-        name,
-        prompt,
-        isDefault,
-        updatedAt: Date.now(),
-      })
-      .where(and(eq(personalityTable.id, id), eq(personalityTable.userId, jwt.id)))
-      .returning()
-
-    personality = dbPersonality
-  } catch (e: any) {
-    if (e instanceof Error && e.cause?.toString().includes('UNIQUE constraint'))
-      throw makeError(ErrorCode.PersonalityNameIsClaimed, 409)
-
-    throw e
-  }
+  const [personality] = await db
+    .update(personalityTable)
+    .set({
+      name,
+      prompt,
+      isDefault,
+      updatedAt: Date.now(),
+    })
+    .where(and(eq(personalityTable.id, id), eq(personalityTable.userId, jwt.id)))
+    .returning()
 
   if (!personality) throw makeError(ErrorCode.PersonalityNotFound, 404)
 
   const { doStub } = getDo(c.env, jwt.id)
 
-  c.executionCtx.waitUntil(doStub.ackPersonalityUpdated(jwt.id, personality))
+  c.executionCtx.waitUntil(
+    Promise.all([
+      doStub.ackPersonalityUpdated(jwt.id, personality),
+      isDefault
+        ? await db
+            .update(personalityTable)
+            .set({
+              isDefault: false,
+            })
+            .where(
+              and(
+                eq(personalityTable.userId, jwt.id),
+                eq(personalityTable.isDefault, true),
+                ne(personalityTable.id, personality.id),
+              ),
+            )
+            .execute()
+        : undefined,
+    ]),
+  )
 
   return c.json({ personality })
 })

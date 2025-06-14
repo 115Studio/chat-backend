@@ -161,7 +161,6 @@ export const personalityTable = sqliteTable(
   (t) => [
     uniqueIndex('personality_id_index').on(t.id),
     index('personality_user_id_index').on(t.userId),
-    uniqueIndex('personality_name_index').on(t.name),
     index('personality_is_default_index').on(t.isDefault),
   ],
 )

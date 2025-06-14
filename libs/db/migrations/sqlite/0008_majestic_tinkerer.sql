@@ -1,0 +1,1 @@
+DROP INDEX `personality_name_index`;
