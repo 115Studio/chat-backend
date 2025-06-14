@@ -151,7 +151,7 @@ export const personalityTable = sqliteTable(
     userId: text('user_id').notNull(),
 
     name: text('name').notNull(),
-    default: integer('default', { mode: 'boolean' }).default(false).notNull(),
+    isDefault: integer('is_default', { mode: 'boolean' }).default(false).notNull(),
 
     prompt: text('prompt').notNull(),
 
@@ -162,6 +162,7 @@ export const personalityTable = sqliteTable(
     uniqueIndex('personality_id_index').on(t.id),
     index('personality_user_id_index').on(t.userId),
     uniqueIndex('personality_name_index').on(t.name),
+    index('personality_is_default_index').on(t.isDefault),
   ],
 )
 
