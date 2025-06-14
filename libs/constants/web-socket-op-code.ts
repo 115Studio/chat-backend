@@ -7,6 +7,7 @@ export enum WebSocketOpCode {
   UserSettingsUpdate,
   UserPlanUpdate,
   ServerHello,
+  SyncInput,
 
   MessageCreate = 10100,
   MessageUpdate,

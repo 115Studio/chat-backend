@@ -15,6 +15,7 @@ import {
   MessageStage,
   MessageStages,
   Personality,
+  syncedMessagesTable,
   User,
   usersTable,
 } from '../../libs/db/schema'
@@ -26,15 +27,41 @@ import { askAi } from '../../libs/ai/ask-ai'
 import { MessageStageType } from '../../libs/constants/message-stage-type'
 import { AiMessage, messageToAi } from '../../libs/ai/message-to-ai'
 import { getSystemPrompt } from '../../libs/ai/get-system-prompt'
+import { z } from 'zod'
+import { MessageStageContentType } from '../../libs/constants/message-stage-content-type'
+import { snowflake } from '../../libs/utils/snowflake'
 
 export interface WebSocketMeta {
   userId: string
+  sessionId: string
 }
+
+export interface SyncedMessage {
+  stages: MessageStages
+  channelId: string
+}
+
+const syncedMessageDto = z.object({
+  stages: z.array(
+    z.object({
+      id: z.string(),
+      type: z.nativeEnum(MessageStageType),
+      content: z.object({
+        type: z.nativeEnum(MessageStageContentType),
+        value: z.string(),
+      }),
+    }),
+  ),
+  channelId: z.string(),
+})
 
 export class UserDo extends DurableObject<EventEnvironment> {
   private sessions: Map<WebSocket, { meta: WebSocketMeta }>
   private db: DbInstance
   private messages: Map<string, MessageStages> = new Map()
+
+  private syncedMessage?: Map<string, SyncedMessage[]> = new Map()
+  private syncingTimeouts: Map<string, NodeJS.Timeout> = new Map()
 
   constructor(ctx: DurableObjectState, env: EventEnvironment) {
     super(ctx, env)
@@ -75,7 +102,7 @@ export class UserDo extends DurableObject<EventEnvironment> {
 
     this.ctx.acceptWebSocket(server)
 
-    const attachment = { meta: { userId: payload.id } }
+    const attachment = { meta: { userId: payload.id, sessionId: snowflake() } }
 
     server.serializeAttachment(attachment)
     this.sessions.set(server, attachment)
@@ -103,7 +130,16 @@ export class UserDo extends DurableObject<EventEnvironment> {
   async serverHello(ws: WebSocket) {
     const user = this.sessions.get(ws)?.meta.userId!
 
-    const [userData] = await this.db.select().from(usersTable).where(eq(usersTable.id, user)).execute()
+    const [[userData], inputs] = await this.db.batch([
+      this.db.select().from(usersTable).where(eq(usersTable.id, user)),
+      this.db
+        .select({
+          stages: syncedMessagesTable.stages,
+          channelId: syncedMessagesTable.channelId,
+        })
+        .from(syncedMessagesTable)
+        .where(eq(syncedMessagesTable.userId, user)),
+    ])
 
     if (!userData) {
       this.webSocketClose(ws, 1006)
@@ -120,18 +156,76 @@ export class UserDo extends DurableObject<EventEnvironment> {
             defaultModel: userData.defaultModel,
             displayModels: userData.displayModels,
           },
+          inputs,
           ts: Date.now(),
         },
       }),
     )
   }
 
-  broadcastMessage(userId: string, message: any) {
+  async webSocketMessage(ws: WebSocket, message: string | ArrayBuffer) {
+    const { userId, sessionId } = this.sessions.get(ws)?.meta!
+
+    const parsed = typeof message === 'string' ? JSON.parse(message) : message
+
+    if (parsed.op === WebSocketOpCode.SyncInput) {
+      const { stages, channelId } = syncedMessageDto.parse(parsed.data)
+
+      await this.syncMessage(userId, sessionId, {
+        stages,
+        channelId,
+      })
+    }
+  }
+
+  async syncMessage(userId: string, sessionId: string, message: SyncedMessage) {
+    if (!this.syncedMessage) this.syncedMessage = new Map()
+    if (!this.syncedMessage.has(userId)) this.syncedMessage.set(userId, [message])
+
+    const timeout = this.syncingTimeouts.get(userId)
+    if (timeout) clearTimeout(timeout)
+
+    this.syncingTimeouts.set(
+      userId,
+      setTimeout(async () => {
+        await this.saveSyncedMessage(userId, message)
+
+        this.syncingTimeouts.delete(userId)
+      }, 5000),
+    )
+
+    this.broadcastMessage(
+      userId,
+      {
+        op: WebSocketOpCode.SyncInput,
+        data: message,
+      },
+      [sessionId],
+    )
+  }
+
+  saveSyncedMessage(userId: string, message: SyncedMessage) {
+    return this.db
+      .insert(syncedMessagesTable)
+      .values({
+        userId,
+        channelId: message.channelId,
+        stages: message.stages,
+      })
+      .onConflictDoUpdate({
+        target: [syncedMessagesTable.userId, syncedMessagesTable.channelId],
+        set: {
+          stages: message.stages,
+        },
+      })
+  }
+
+  broadcastMessage(userId: string, message: any, skipSessions: string[] = []) {
     if (typeof message !== 'string') message = JSON.stringify(message)
 
     this.sessions.forEach((session, ws) => {
       try {
-        if (session.meta.userId === userId) ws.send(message)
+        if (session.meta.userId === userId && !skipSessions.includes(session.meta.sessionId)) ws.send(message)
       } catch (e) {
         this.sessions.delete(ws)
       }

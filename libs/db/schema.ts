@@ -1,4 +1,4 @@
-import { index, integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
+import { index, integer, primaryKey, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
 import { OauthProvider } from '../constants/oauth-provider'
 import { UserPlan } from '../constants/user-plan'
 import { AiModel } from '../constants/ai-model'
@@ -166,3 +166,22 @@ export const personalityTable = sqliteTable(
 )
 
 export type Personality = typeof personalityTable.$inferSelect
+
+export const syncedMessagesTable = sqliteTable(
+  'synced_messages',
+  {
+    userId: text('user_id').notNull(),
+    channelId: text('channel_id').notNull(),
+
+    stages: text('stages', { mode: 'json' }).$type<MessageStages>().default([]).notNull(),
+  },
+  (t) => [
+    primaryKey({
+      columns: [t.userId, t.channelId],
+    }),
+    index('synced_messages_user_id_index').on(t.userId),
+    index('synced_messages_channel_id_index').on(t.channelId),
+  ],
+)
+
+export type SyncedDBMessage = typeof syncedMessagesTable.$inferSelect
