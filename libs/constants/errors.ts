@@ -20,6 +20,7 @@ export enum ErrorCode {
 
   BYOKNotFound = 3000,
   BYOKModelAlreadyUsed,
+  InvalidBYOKKey,
 
   PersonalityNotFound = 4000,
   PersonalityNameIsClaimed,
@@ -48,6 +49,7 @@ export const errorMessages: Record<ErrorCode, string> = {
 
   [ErrorCode.BYOKNotFound]: 'BYOK not found',
   [ErrorCode.BYOKModelAlreadyUsed]: 'One or more models are already in use by another BYOK.',
+  [ErrorCode.InvalidBYOKKey]: 'Invalid BYOK key',
 
   [ErrorCode.PersonalityNotFound]: 'Personality not found',
   [ErrorCode.PersonalityNameIsClaimed]: 'This personality name is already claimed',

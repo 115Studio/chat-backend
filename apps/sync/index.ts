@@ -23,9 +23,7 @@ import { AiReturnType } from '../../libs/constants/ai-return-type'
 import { MessageState } from '../../libs/constants/message-state'
 import { eq } from 'drizzle-orm'
 import { askAi } from '../../libs/ai/ask-ai'
-import { snowflake } from '../../libs/utils/snowflake'
 import { MessageStageType } from '../../libs/constants/message-stage-type'
-import { MessageStageContentType } from '../../libs/constants/message-stage-content-type'
 import { AiMessage, messageToAi } from '../../libs/ai/message-to-ai'
 import { getSystemPrompt } from '../../libs/ai/get-system-prompt'
 
@@ -241,14 +239,14 @@ export class UserDo extends DurableObject<EventEnvironment> {
     })
   }
 
-  ackBYOKCreated(userId: string, byok: BYOK) {
+  ackBYOKCreated(userId: string, byok: Omit<BYOK, 'key'>) {
     this.broadcastMessage(userId, {
       op: WebSocketOpCode.BYOKCreated,
       data: { byok },
     })
   }
 
-  ackBYOKUpdated(userId: string, byok: BYOK) {
+  ackBYOKUpdated(userId: string, byok: Omit<BYOK, 'key'>) {
     this.broadcastMessage(userId, {
       op: WebSocketOpCode.BYOKUpdated,
       data: { byok },

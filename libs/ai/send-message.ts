@@ -14,6 +14,7 @@ import { parseDataStreamPart } from './data-stream-parts'
 import { upload } from '../utils/upload'
 import { MessageStageContentType } from '../constants/message-stage-content-type'
 import { jsonBytesToArrayBuffer } from '../utils/json-bytes-to-ab'
+import { decryptByokKey } from '../../apps/byok'
 
 export type StreamMessageUpdate = Required<MessageStage>
 
@@ -27,27 +28,30 @@ export const sendMessage = async (
   const provider = modelToProvider(model.id)
 
   const keyForModel = byoks.find((byok) => byok.models.includes(model.id!))?.key
+  const decryptedKey = keyForModel ? await decryptByokKey(env, keyForModel) : null
 
   let stream: ReadableStream<any> | null = null
 
   switch (provider) {
     case AiProvider.Anthropic:
-      stream = await anthropic(mergeModelAuth(model, keyForModel ?? env.ANTHROPIC_AUTH), messages)
+      stream = await anthropic(mergeModelAuth(model, decryptedKey ?? env.ANTHROPIC_AUTH), messages)
       break
 
     case AiProvider.GoogleAiStudio:
-      stream = await google(mergeModelAuth(model, keyForModel ?? env.GOOGLE_AI_AUTH), messages)
+      stream = await google(mergeModelAuth(model, decryptedKey ?? env.GOOGLE_AI_AUTH), messages)
       break
 
     case AiProvider.OpenAi:
-      stream = await openai(mergeModelAuth(model, keyForModel ?? env.OPENAI_AUTH), messages)
+      stream = await openai(mergeModelAuth(model, decryptedKey ?? env.OPENAI_AUTH), messages)
       break
 
     default:
     case AiProvider.UnknownToGoogleAi:
       const googleKey = byoks.find((byok) => byok.models.includes(AiModel.GoogleGemini20Flash))?.key
+      const decryptedGoogleKey = googleKey ? await decryptByokKey(env, googleKey) : null
+
       stream = await google(
-        mergeModelAuth({ id: AiModel.GoogleGemini20Flash }, googleKey ?? env.GOOGLE_AI_AUTH),
+        mergeModelAuth({ id: AiModel.GoogleGemini20Flash }, decryptedGoogleKey ?? env.GOOGLE_AI_AUTH),
         messages,
       )
       break

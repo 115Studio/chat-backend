@@ -74,7 +74,7 @@ app.post('/', zValidator('json', CreatePersonalityDto, zResponse), async (c) => 
 
   const { doStub } = getDo(c.env, jwt.id)
 
-  await doStub.ackPersonalityCreated(jwt.id, personality)
+  c.executionCtx.waitUntil(doStub.ackPersonalityCreated(jwt.id, personality))
 
   return c.json({ personality })
 })
@@ -112,7 +112,7 @@ app.patch(':id', zValidator('json', UpdatePersonalityDto, zResponse), async (c) 
 
   const { doStub } = getDo(c.env, jwt.id)
 
-  await doStub.ackPersonalityUpdated(jwt.id, personality)
+  c.executionCtx.waitUntil(doStub.ackPersonalityUpdated(jwt.id, personality))
 
   return c.json({ personality })
 })
@@ -131,7 +131,7 @@ app.delete(':id', async (c) => {
 
   const { doStub } = getDo(c.env, jwt.id)
 
-  await doStub.ackPersonalityDeleted(jwt.id, id)
+  c.executionCtx.waitUntil(doStub.ackPersonalityDeleted(jwt.id, id))
 
   return c.json({ success: true })
 })
