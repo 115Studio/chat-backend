@@ -64,7 +64,7 @@ app.post('/', zValidator('json', createByokDTO, zResponse), async (c) => {
 
   const { doStub } = getDo(c.env, jwt.id)
 
-  await doStub.ackBYOKCreated(jwt.id, byok)
+  c.executionCtx.waitUntil(doStub.ackBYOKCreated(jwt.id, byok))
 
   return c.json({ status: true, byok })
 })
@@ -103,7 +103,7 @@ app.patch('/:id', zValidator('json', updateByokDTO, zResponse), async (c) => {
 
   const { doStub } = getDo(c.env, jwt.id)
 
-  await doStub.ackBYOKUpdated(jwt.id, byok)
+  c.executionCtx.waitUntil(doStub.ackBYOKUpdated(jwt.id, byok))
 
   return c.json({ status: true, byok })
 })
@@ -123,7 +123,7 @@ app.delete('/:id', async (c) => {
 
   const { doStub } = getDo(c.env, jwt.id)
 
-  await doStub.ackBYOKDeleted(jwt.id, id)
+  c.executionCtx.waitUntil(doStub.ackBYOKDeleted(jwt.id, id))
 
   return c.json({ status: true })
 })

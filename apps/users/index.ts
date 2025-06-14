@@ -40,7 +40,7 @@ app.patch('/update', zValidator('json', updateUserDto, zResponse), async (c) => 
 
   const { doStub } = getDo(c.env, userId)
 
-  await doStub.ackUserUpdate(userId, user)
+  c.executionCtx.waitUntil(doStub.ackUserUpdate(userId, user))
 
   return c.json({ status: true, user })
 })
