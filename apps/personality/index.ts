@@ -69,7 +69,8 @@ app.post('/', zValidator('json', CreatePersonalityDto, zResponse), async (c) => 
     if (e instanceof Error && e.cause?.toString().includes('UNIQUE constraint'))
       throw makeError(ErrorCode.PersonalityNameIsClaimed, 409)
 
-    throw e
+    console.error(e)
+    throw makeError(ErrorCode.UnknownError, 500)
   }
 
   const { doStub } = getDo(c.env, jwt.id)
