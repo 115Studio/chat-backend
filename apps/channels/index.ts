@@ -428,15 +428,10 @@ app.get('/:id/messages', zValidator('query', getMessagesDto, zResponse), async (
   const channelId = c.req.param('id')
   const { from, to, limit } = c.req.valid('query')
 
-  const [ channel ] = await db
+  const [channel] = await db
     .select()
     .from(channelsTable)
-    .where(
-      and(
-        eq(channelsTable.id, channelId),
-        eq(channelsTable.ownerId, jwt.id)
-      )
-    )
+    .where(and(eq(channelsTable.id, channelId), eq(channelsTable.ownerId, jwt.id)))
     .execute()
 
   if (!channel) {
@@ -527,7 +522,7 @@ app.get('/', zValidator('query', getChannelsDto, zResponse), async (c) => {
     }
   }
 
-  const [ channels, pinned ] = await Promise.all([
+  const [channels, pinned] = await Promise.all([
     db
       .select()
       .from(channelsTable)
@@ -537,13 +532,14 @@ app.get('/', zValidator('query', getChannelsDto, zResponse), async (c) => {
       .execute(),
     pins
       ? db
-        .select()
-        .from(channelsTable)
-        .where(and(eq(channelsTable.ownerId, jwt.id), eq(channelsTable.isPinned, true)))
-        .orderBy(desc(channelsTable.createdAt))
-      : undefined
+          .select()
+          .from(channelsTable)
+          .where(and(eq(channelsTable.ownerId, jwt.id), eq(channelsTable.isPinned, true)))
+          .orderBy(desc(channelsTable.createdAt))
+      : undefined,
   ])
 
+  console.log(`[channels]`, channels.length, `pinned`, pinned?.length)
   const result = pins ? [...pinned!, ...channels] : channels
 
   return c.json({
@@ -629,18 +625,18 @@ app.delete('/:id', async (c) => {
 
   const channelId = c.req.param('id')
 
-  const channels = await db
+  const [channel] = await db
     .select()
     .from(channelsTable)
     .where(and(eq(channelsTable.id, channelId), eq(channelsTable.ownerId, jwt.id)))
     .execute()
 
-  const channel = channels[0]
-  if (!channel) {
-    throw makeError(ErrorCode.UnknownChannel, 404)
-  }
+  if (!channel) throw makeError(ErrorCode.UnknownChannel, 404)
 
-  await db.delete(channelsTable).where(eq(channelsTable.id, channel.id)).execute()
+  await Promise.all([
+    db.delete(channelsTable).where(eq(channelsTable.id, channel.id)).execute(),
+    db.delete(messagesTable).where(eq(messagesTable.channelId, channel.id)).execute(),
+  ])
 
   const { doStub } = getDo(c.env, jwt.id)
 
