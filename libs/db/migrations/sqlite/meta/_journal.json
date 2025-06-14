@@ -43,13 +43,6 @@
       "when": 1749917804398,
       "tag": "0005_huge_young_avengers",
       "breakpoints": true
-    },
-    {
-      "idx": 6,
-      "version": "6",
-      "when": 1749925257602,
-      "tag": "0006_glorious_ghost_rider",
-      "breakpoints": true
     }
   ]
 }
