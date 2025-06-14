@@ -70,6 +70,11 @@ const updateChannelDto = z.object({
   name: z.string().min(1).max(100),
 })
 
+const getChannelsDto = z.object({
+  skip: z.coerce.number().min(0).default(0),
+  limit: z.coerce.number().min(1).max(100).default(10),
+})
+
 app.post('/:id/messages', zValidator('json', createMessageDto, zResponse), async (c) => {
   const db = initDbConnect(c.env)
 
@@ -499,15 +504,19 @@ app.get('/:id/messages', zValidator('query', getMessagesDto, zResponse), async (
   })
 })
 
-app.get('/', async (c) => {
+app.get('/', zValidator('query', getChannelsDto, zResponse), async (c) => {
   const db = initDbConnect(c.env)
   const jwt = c.get('jwt')
+
+  const { skip, limit } = c.req.valid('query')
 
   const channels = await db
     .select()
     .from(channelsTable)
     .where(eq(channelsTable.ownerId, jwt.id))
     .orderBy(channelsTable.updatedAt)
+    .limit(limit)
+    .offset(skip)
     .execute()
 
   return c.json({
