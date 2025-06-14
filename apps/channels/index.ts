@@ -3,7 +3,7 @@ import { EventEnvironment, HonoEnvironment } from '../../environment'
 import z from 'zod/v4'
 import { zValidator } from '@hono/zod-validator'
 import { checkJwt, JwtVariable } from '../../libs/middleware/check-jwt'
-import { snowflake } from '../../libs/utils/snowflake'
+import { deconstructSnowflake, snowflake } from '../../libs/utils/snowflake'
 import { AiModel } from '../../libs/constants/ai-model'
 import { getDo } from '../../libs/utils/get-do'
 import { DbInstance, initDbConnect } from '../../libs/db/init'
@@ -425,13 +425,17 @@ app.get('/:id/messages', zValidator('query', getMessagesDto, zResponse), async (
   const channelId = c.req.param('id')
   const { from, to, limit } = c.req.valid('query')
 
-  const channels = await db
+  const [ channel ] = await db
     .select()
     .from(channelsTable)
-    .where(and(eq(channelsTable.id, channelId), eq(channelsTable.ownerId, jwt.id)))
+    .where(
+      and(
+        eq(channelsTable.id, channelId),
+        eq(channelsTable.ownerId, jwt.id)
+      )
+    )
     .execute()
 
-  const channel = channels[0]
   if (!channel) {
     throw makeError(ErrorCode.UnknownChannel, 404)
   }
@@ -439,26 +443,18 @@ app.get('/:id/messages', zValidator('query', getMessagesDto, zResponse), async (
   const conditions = [eq(messagesTable.channelId, channelId)]
 
   if (from) {
-    const fromMessage = await db
-      .select({ createdAt: messagesTable.createdAt })
-      .from(messagesTable)
-      .where(eq(messagesTable.id, from))
-      .execute()
+    const fromMessageCreatedAt = deconstructSnowflake(from).timestamp
 
-    if (fromMessage[0]) {
-      conditions.push(gt(messagesTable.createdAt, fromMessage[0].createdAt))
+    if (fromMessageCreatedAt) {
+      conditions.push(gt(messagesTable.createdAt, fromMessageCreatedAt))
     }
   }
 
   if (to) {
-    const toMessage = await db
-      .select({ createdAt: messagesTable.createdAt })
-      .from(messagesTable)
-      .where(eq(messagesTable.id, to))
-      .execute()
+    const toMessageCreatedAt = deconstructSnowflake(to).timestamp
 
-    if (toMessage[0]) {
-      conditions.push(lt(messagesTable.createdAt, toMessage[0].createdAt))
+    if (toMessageCreatedAt) {
+      conditions.push(lt(messagesTable.createdAt, toMessageCreatedAt))
     }
   }
 
