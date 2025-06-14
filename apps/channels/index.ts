@@ -37,6 +37,7 @@ import { AiModelFlag } from '../../libs/constants/ai-model-flag'
 import { stagesToFeatures } from '../../libs/ai/stages-to-features'
 import { modelToFeatures } from '../../libs/ai/model-to-features'
 import { AiMessage } from '../../libs/ai/message-to-ai'
+import { BatchItem } from 'drizzle-orm/batch'
 
 const app = new Hono<HonoEnvironment & JwtVariable>()
 
@@ -71,8 +72,10 @@ const updateChannelDto = z.object({
 })
 
 const getChannelsDto = z.object({
-  skip: z.coerce.number().min(0).default(0),
+  from: z.string().optional(),
+  to: z.string().optional(),
   limit: z.coerce.number().min(1).max(100).default(10),
+  pins: z.coerce.boolean().default(false),
 })
 
 app.post('/:id/messages', zValidator('json', createMessageDto, zResponse), async (c) => {
@@ -504,19 +507,47 @@ app.get('/', zValidator('query', getChannelsDto, zResponse), async (c) => {
   const db = initDbConnect(c.env)
   const jwt = c.get('jwt')
 
-  const { skip, limit } = c.req.valid('query')
+  const { from, to, limit, pins } = c.req.valid('query')
 
-  const channels = await db
-    .select()
-    .from(channelsTable)
-    .where(eq(channelsTable.ownerId, jwt.id))
-    .orderBy(channelsTable.updatedAt)
-    .limit(limit)
-    .offset(skip)
-    .execute()
+  const conditions = [eq(channelsTable.ownerId, jwt.id)]
+
+  if (from) {
+    const fromChannelCreatedAt = deconstructSnowflake(from).timestamp
+
+    if (fromChannelCreatedAt) {
+      conditions.push(gt(channelsTable.createdAt, fromChannelCreatedAt))
+    }
+  }
+
+  if (to) {
+    const toChannelCreatedAt = deconstructSnowflake(to).timestamp
+
+    if (toChannelCreatedAt) {
+      conditions.push(lt(channelsTable.createdAt, toChannelCreatedAt))
+    }
+  }
+
+  const [ channels, pinned ] = await Promise.all([
+    db
+      .select()
+      .from(channelsTable)
+      .where(and(...conditions))
+      .orderBy(desc(channelsTable.createdAt))
+      .limit(limit)
+      .execute(),
+    pins
+      ? db
+        .select()
+        .from(channelsTable)
+        .where(and(eq(channelsTable.ownerId, jwt.id), eq(channelsTable.isPinned, true)))
+        .orderBy(desc(channelsTable.createdAt))
+      : undefined
+  ])
+
+  const result = pins ? [...pinned!, ...channels] : channels
 
   return c.json({
-    channels,
+    channels: result,
   })
 })
 
