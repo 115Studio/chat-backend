@@ -83,11 +83,11 @@ export class UserDo extends DurableObject<EventEnvironment> {
   //   this.broadcastMessage(user, `User: ${user}, Echo: ${message}, clients: ${this.sessions.size}`)
   // }
 
-  async heartbeat() {
-    this.sessions.forEach((s, ws) => {
-      ws.send(JSON.stringify({ op: WebSocketOpCode.Heartbeat, data: { ts: Date.now() } }))
-    })
-  }
+  // async heartbeat() {
+  //   this.sessions.forEach((s, ws) => {
+  //     ws.send(JSON.stringify({ op: WebSocketOpCode.Heartbeat, data: { ts: Date.now() } }))
+  //   })
+  // }
 
   broadcastMessage(userId: string, message: any) {
     if (typeof message !== 'string') message = JSON.stringify(message)
@@ -265,9 +265,9 @@ export class UserDo extends DurableObject<EventEnvironment> {
       .returning()
       .execute()
 
-    this.messages.delete(messageId)
-
     this.ackMessageUpdate(userId, msg)
+
+    this.messages.delete(messageId)
 
     return msg.stages
   }

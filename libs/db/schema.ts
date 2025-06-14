@@ -81,6 +81,7 @@ export const messagesTable = sqliteTable('messages', {
   updatedAt: integer('updated_at'),
 }, (t) => [
   uniqueIndex('messages_id_index').on(t.id),
+  index('messages_state_index').on(t.state),
   index('messages_channel_id_index').on(t.channelId),
   index('messages_user_id_index').on(t.userId),
   index('messages_created_at_index').on(t.createdAt),

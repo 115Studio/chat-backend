@@ -1,0 +1,1 @@
+CREATE INDEX `messages_state_index` ON `messages` (`state`);
