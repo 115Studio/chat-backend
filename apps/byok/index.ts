@@ -82,7 +82,7 @@ app.post('/', zValidator('json', createByokDTO, zResponse), async (c) => {
 
   c.executionCtx.waitUntil(doStub.ackBYOKCreated(jwt.id, byokWithoutKey))
 
-  return c.json({ status: true, byokWithoutKey })
+  return c.json({ status: true, byok: byokWithoutKey })
 })
 
 app.patch('/:id', zValidator('json', updateByokDTO, zResponse), async (c) => {
@@ -126,7 +126,7 @@ app.patch('/:id', zValidator('json', updateByokDTO, zResponse), async (c) => {
 
   c.executionCtx.waitUntil(doStub.ackBYOKUpdated(jwt.id, byokWithoutKey))
 
-  return c.json({ status: true, byokWithoutKey })
+  return c.json({ status: true, byok: byokWithoutKey })
 })
 
 app.delete('/:id', async (c) => {
