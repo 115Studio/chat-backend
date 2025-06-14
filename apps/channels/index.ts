@@ -78,6 +78,10 @@ const getChannelsDto = z.object({
   pins: z.coerce.boolean().default(false),
 })
 
+const pinChannelDto = z.object({
+  pin: z.coerce.boolean().default(false),
+})
+
 app.post('/:id/messages', zValidator('json', createMessageDto, zResponse), async (c) => {
   const db = initDbConnect(c.env)
 
@@ -586,9 +590,11 @@ app.patch('/:id', zValidator('json', updateChannelDto, zResponse), async (c) => 
   })
 })
 
-app.post('/:id/pin', async (c) => {
+app.post('/:id/pin', zValidator('json', pinChannelDto), async (c) => {
   const db = initDbConnect(c.env)
   const jwt = c.get('jwt')
+
+  const { pin } = c.req.valid('json')
 
   const channelId = c.req.param('id')
 
@@ -605,7 +611,7 @@ app.post('/:id/pin', async (c) => {
 
   const [newChannel] = await db
     .update(channelsTable)
-    .set({ isPinned: !channel.isPinned })
+    .set({ isPinned: pin })
     .where(eq(channelsTable.id, channel.id))
     .returning()
     .execute()
