@@ -253,7 +253,7 @@ export class UserDo extends DurableObject<EventEnvironment> {
     console.log('ackChannelUpdate', userId, channel.id)
     this.broadcastMessage(userId, {
       op: WebSocketOpCode.ChannelUpdate,
-      data: {},
+      data: { channel },
     })
   }
 
