@@ -33,6 +33,7 @@ import { MessageStageContentType } from '../../libs/constants/message-stage-cont
 import { AiModelFlag } from '../../libs/constants/ai-model-flag'
 import { stagesToFeatures } from '../../libs/ai/stages-to-features'
 import { modelToFeatures } from '../../libs/ai/model-to-features'
+import { AiMessage } from '../../libs/ai/message-to-ai'
 
 const app = new Hono<HonoEnvironment & JwtVariable>()
 
@@ -319,42 +320,36 @@ async function completeMessageCreate(
   const textContent = textContentStage?.content?.value
 
   const summarize = async (content: string) => {
-    // const summarizeSystemMessage: AiMessage[] = [
-    //   {
-    //     role: 'system',
-    //     content: [
-    //       {
-    //         id: snowflake(),
-    //         type: MessageStageType.Text,
-    //         content: {
-    //           type: MessageStageContentType.Text,
-    //           value: `You are a helpful assistant. Your task is to summarize the message and provide ` +
-    //             `a response based on the user's message with ONLY 1-3 words long. Always use the same language as the user. ` +
-    //             `Do not include any additional information or explanations. ` +
-    //             `If the conversation is empty, just respond with "New chat"`
-    //         }
-    //       }
-    //     ]
-    //   },
-    //   {
-    //     role: 'user',
-    //     content: [
-    //       {
-    //         id: snowflake(),
-    //         type: MessageStageType.Text,
-    //         content: {
-    //           type: MessageStageContentType.Text,
-    //           value: content
-    //         }
-    //       }
-    //     ]
-    //   }
-    // ]
-    //
-    // return await askAi<AiReturnType.Complete>(
-    //   env, { id: AiModel.GoogleGemini20Flash }, summarizeSystemMessage, AiReturnType.Complete
-    // ) ?? 'New chat'
-    return '123'
+    const summarizeSystemMessage: AiMessage[] = [
+      {
+        role: 'system',
+        content: `You are a helpful assistant. Your task is to summarize the message and provide ` +
+          `a response based on the user's message with ONLY 1-3 words long. Always use the same language as the user. ` +
+          `Do not include any additional information or explanations. ` +
+          `If the conversation is empty, just respond with "New chat"`
+      },
+      {
+        role: 'user',
+        content,
+      }
+    ]
+
+    const result = await askAi<AiReturnType.Complete>(
+      env, { id: AiModel.GoogleGemini20Flash }, summarizeSystemMessage, jwt.id, AiReturnType.Complete
+    )
+
+    if (!result) {
+      return 'New chat'
+    }
+
+    const resultStage = result.find(r => r.type === MessageStageType.Text)
+    const resultText = resultStage?.content?.value
+
+    if (!resultText) {
+      return 'New chat'
+    }
+
+    return resultText.trim()
   }
 
   const update = async (newName: string) => {

@@ -4,4 +4,5 @@ export enum MessageStageContentType {
   File,
   Audio,
   Url,
+  Search,
 }

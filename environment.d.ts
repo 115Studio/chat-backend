@@ -11,7 +11,7 @@ type HonoEnvironment = Env & {
     R2: R2Bucket
     // You can use http://127.0.0.1:8787/api/v1/images as the local CDN endpoint
     CDN_ENDPOINT: string
-    // CDN host, e.g. cdn.blook.so. Without any protocol or trailing slash.
+    // CDN host, e.g. cdn.example.com. Without any protocol or trailing slash.
     CDN_HOST: string
 
     USER_DURABLE_OBJECT: DurableObjectNamespace<UserDo>
@@ -25,7 +25,6 @@ type HonoEnvironment = Env & {
     ANTHROPIC_AUTH?: string
     GOOGLE_AI_AUTH?: string
     OPENAI_AUTH?: string
-    PERPLEXITY_AUTH?: string
   }
 }
 

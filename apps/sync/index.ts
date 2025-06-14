@@ -182,7 +182,7 @@ export class UserDo extends DurableObject<EventEnvironment> {
       ...history.map(messageToAi),
     ]
 
-    const stream = await askAi<AiReturnType.Stream>(this.env, current.model, messages, AiReturnType.Stream)
+    const stream = await askAi<AiReturnType.Stream>(this.env, current.model, messages, userId, AiReturnType.Stream)
 
     if (!stream) {
       const [ msg ] = await this.db
@@ -204,63 +204,72 @@ export class UserDo extends DurableObject<EventEnvironment> {
     let lastSaveTime = Date.now()
     const SAVE_INTERVAL = 3000 // 3 seconds
 
-    const stageContentMap = new Map<string, MessageStage>()
+    const stages = new Map<string, MessageStage>()
 
-    // while (true) {
-    //   const { done, value } = await reader.read()
-    //   if (done) break
-    //
-    //   ts = Date.now()
-    //
-    //   this.ackMessageStageUpdate(userId, messageId, value, ts)
-    //
-    //   stageContentMap.set(value.id, {
-    //     id: value.id,
-    //     type: value.type,
-    //     content: {
-    //       type: MessageStageContentType.Text,
-    //       value: value.content
-    //     }
-    //   })
-    //
-    //   const currentStages = Array.from(stageContentMap.values())
-    //     .filter(stage => stage.type !== MessageStageType.Think || stage.type === MessageStageType.Think && stage.content?.value !== 'Thinking...');
-    //
-    //   this.messages.set(messageId, currentStages)
-    //
-    //   if (ts - lastSaveTime >= SAVE_INTERVAL) {
-    //     await this.db
-    //       .update(messagesTable)
-    //       .set({
-    //         stages: this.messages.get(messageId) || [],
-    //         updatedAt: ts,
-    //       })
-    //       .where(eq(messagesTable.id, messageId))
-    //       .execute()
-    //
-    //     lastSaveTime = ts
-    //   }
-    // }
-    //
-    // const finalStages = (this.messages.get(messageId) || [])
-    //   .filter(stage => stage.type !== MessageStageType.Think);
-    //
-    // const [ msg ] = await this.db
-    //   .update(messagesTable)
-    //   .set({
-    //     state: MessageState.Completed,
-    //     stages: finalStages,
-    //     updatedAt: ts
-    //   })
-    //   .where(eq(messagesTable.id, messageId))
-    //   .returning()
-    //   .execute()
-    //
-    // this.messages.delete(messageId)
-    //
-    // this.ackMessageUpdate(userId, msg)
-    //
-    // return msg.stages
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+
+      ts = Date.now()
+
+      if (!value) continue
+
+      this.ackMessageStageUpdate(userId, messageId, value, ts)
+
+      let stage = stages.get(value.id)
+
+      if (!stage) {
+        stage = value
+        stages.set(value.id, stage)
+      }
+
+      switch (stage.type) {
+        case MessageStageType.Text:
+        case MessageStageType.Think:
+          if (!value.content.value) continue
+
+          if (stage.content) {
+            stage.content.value += value.content.value
+          } else {
+            stage.content = value.content
+          }
+          break
+        default:
+          stage.content = value.content
+      }
+
+      this.messages.set(messageId, Array.from(stages.values()))
+
+      if (ts - lastSaveTime >= SAVE_INTERVAL) {
+        await this.db
+          .update(messagesTable)
+          .set({
+            stages: this.messages.get(messageId) || [],
+            updatedAt: ts,
+          })
+          .where(eq(messagesTable.id, messageId))
+          .execute()
+
+        lastSaveTime = ts
+      }
+    }
+
+    const [ msg ] = await this.db
+      .update(messagesTable)
+      .set({
+        state: MessageState.Completed,
+        stages: Array.from(stages.values()),
+        updatedAt: ts
+      })
+      .where(eq(messagesTable.id, messageId))
+      .returning()
+      .execute()
+
+    this.messages.delete(messageId)
+
+    this.ackMessageUpdate(userId, msg)
+
+    return msg.stages
   }
 
   getIncompleteMessage(messageId: string): MessageStages | undefined {

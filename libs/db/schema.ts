@@ -52,7 +52,7 @@ export interface MessageStageContent {
 }
 
 export interface MessageStage {
-  id: string
+  id?: string
   type: MessageStageType
   content?: MessageStageContent
 }

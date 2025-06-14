@@ -1,4 +1,6 @@
 export enum MessageStageType {
+  Unsupported,
+  Error,
   Think,
   Text,
   Vision,
@@ -7,5 +9,7 @@ export enum MessageStageType {
   VisionGen,
   WebSearch,
   Audio,
+  AudioGen,
   Link,
+  ToBeParsed,
 }

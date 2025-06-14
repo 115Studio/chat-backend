@@ -4,7 +4,7 @@ import { makeTextError } from '../../../utils/make-error'
 import { ErrorCode } from '../../../constants/errors'
 import { text } from './tools'
 
-export const anthropic = async (
+export const google = async (
   model: ModelSettings,
   messages: AiMessage[],
 ) => {

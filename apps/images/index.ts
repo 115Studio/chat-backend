@@ -18,6 +18,18 @@ import { zValidator } from '@hono/zod-validator'
 
 const app = new Hono<HonoEnvironment & JwtVariable>()
 
+app.get('/uploads/*', async (c) => {
+  const key = c.req.path.split('uploads/')[1]
+
+  const file = await c.env.R2.get(`uploads/${key}`)
+
+  if (!file) {
+    throw makeError(ErrorCode.UnknownUpload, 404)
+  }
+
+  return c.body(file.body, 200)
+})
+
 app.use(checkJwt)
 
 const onError = (c: Context) => {
