@@ -5,23 +5,23 @@ export const modelToFeatures = (model: AiModel): AiModelFeature[] => {
   switch (model) {
     // OpenAI models
     case AiModel.OpenaiGpt4o:
-      return [AiModelFeature.TextGen, AiModelFeature.Vision, AiModelFeature.Reasoning]
+      return [AiModelFeature.TextGen, AiModelFeature.Vision, AiModelFeature.Reasoning, AiModelFeature.ReasoningControl]
     case AiModel.OpenaiGpt4oMini:
-      return [AiModelFeature.TextGen, AiModelFeature.Vision, AiModelFeature.Reasoning]
+      return [AiModelFeature.TextGen, AiModelFeature.Vision, AiModelFeature.Reasoning, AiModelFeature.ReasoningControl]
     case AiModel.OpenaiGpt4Turbo:
-      return [AiModelFeature.TextGen, AiModelFeature.Reasoning]
+      return [AiModelFeature.TextGen, AiModelFeature.Reasoning, AiModelFeature.ReasoningControl]
     case AiModel.OpenaiGpt4:
-      return [AiModelFeature.TextGen, AiModelFeature.Reasoning]
+      return [AiModelFeature.TextGen, AiModelFeature.Reasoning, AiModelFeature.ReasoningControl]
     case AiModel.OpenaiGpt35Turbo:
       return [AiModelFeature.TextGen]
 
     // Anthropic Claude models
     case AiModel.AnthropicClaudeOpus4:
-      return [AiModelFeature.TextGen, AiModelFeature.Reasoning]
+      return [AiModelFeature.TextGen, AiModelFeature.Reasoning, AiModelFeature.ReasoningControl]
     case AiModel.AnthropicClaudeSonnet4:
-      return [AiModelFeature.TextGen, AiModelFeature.Vision, AiModelFeature.PdfScan, AiModelFeature.Reasoning]
+      return [AiModelFeature.TextGen, AiModelFeature.Vision, AiModelFeature.PdfScan, AiModelFeature.Reasoning, AiModelFeature.ReasoningControl]
     case AiModel.AnthropicClaudeSonnet37:
-      return [AiModelFeature.TextGen, AiModelFeature.Vision, AiModelFeature.PdfScan, AiModelFeature.Reasoning]
+      return [AiModelFeature.TextGen, AiModelFeature.Vision, AiModelFeature.PdfScan, AiModelFeature.Reasoning, AiModelFeature.ReasoningControl]
     case AiModel.AnthropicClaudeSonnet35V2:
       return [AiModelFeature.TextGen, AiModelFeature.Vision, AiModelFeature.PdfScan]
     case AiModel.AnthropicClaudeSonnet35:
@@ -29,7 +29,7 @@ export const modelToFeatures = (model: AiModel): AiModelFeature[] => {
     case AiModel.AnthropicClaudeHaiku35:
       return [AiModelFeature.TextGen ]
     case AiModel.AnthropicClaudeOpus3:
-      return [AiModelFeature.TextGen, AiModelFeature.Reasoning]
+      return [AiModelFeature.TextGen, AiModelFeature.Reasoning, AiModelFeature.ReasoningControl]
     case AiModel.AnthropicClaudeHaiku3:
       return [AiModelFeature.TextGen ]
 
@@ -43,7 +43,7 @@ export const modelToFeatures = (model: AiModel): AiModelFeature[] => {
     case AiModel.GoogleGemini15Flash:
       return [AiModelFeature.TextGen, AiModelFeature.Vision]
     case AiModel.GoogleGeminiPro:
-      return [AiModelFeature.TextGen, AiModelFeature.WebSearch, AiModelFeature.PdfScan, AiModelFeature.Vision, AiModelFeature.Reasoning]
+      return [AiModelFeature.TextGen, AiModelFeature.WebSearch, AiModelFeature.PdfScan, AiModelFeature.Vision, AiModelFeature.Reasoning, AiModelFeature.ReasoningControl]
 
     // Groq models
     case AiModel.GroqLlama31:
