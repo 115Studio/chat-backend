@@ -107,7 +107,7 @@ export class UserDo extends DurableObject<EventEnvironment> {
     server.serializeAttachment(attachment)
     this.sessions.set(server, attachment)
 
-    void this.serverHello(server)
+    void this.serverHello(server, attachment)
 
     return new Response(null, {
       status: 101,
@@ -127,13 +127,13 @@ export class UserDo extends DurableObject<EventEnvironment> {
   //   })
   // }
 
-  async serverHello(ws: WebSocket) {
+  async serverHello(ws: WebSocket, attachment: { meta: WebSocketMeta }) {
     console.log('sending server hello')
-    const user = this.sessions.get(ws)?.meta?.userId
+    const user = attachment.meta.userId
 
     if (!user) {
       console.log('closing ws due to missing user')
-      this.webSocketClose(ws, 1006)
+      // this.webSocketClose(ws, 1006)
       return
     }
 
@@ -152,7 +152,7 @@ export class UserDo extends DurableObject<EventEnvironment> {
 
     if (!userData) {
       console.log('closing ws due to missing user data')
-      this.webSocketClose(ws, 1006)
+      // this.webSocketClose(ws, 1006)
       return
     }
 
