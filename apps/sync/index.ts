@@ -410,7 +410,7 @@ export class UserDo extends DurableObject<EventEnvironment> {
 
       if (!value) continue
 
-      this.ackMessageStageUpdate(userId, channelId, messageId, value, ts)
+      this.ackMessageStageUpdate(userId, messageId, channelId, value, ts)
 
       let stage = stages.get(value.id)
 
