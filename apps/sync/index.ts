@@ -142,6 +142,8 @@ export class UserDo extends DurableObject<EventEnvironment> {
         .where(eq(syncedMessagesTable.userId, user)),
     ])
 
+    console.log('user', user, userData, inputs)
+
     if (!userData) {
       this.webSocketClose(ws, 1006)
       return
