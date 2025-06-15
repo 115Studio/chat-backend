@@ -133,7 +133,7 @@ export class UserDo extends DurableObject<EventEnvironment> {
 
     if (!user) {
       console.log('closing ws due to missing user')
-      // this.webSocketClose(ws, 1006)
+      this.webSocketClose(ws, 1006)
       return
     }
 
@@ -154,7 +154,7 @@ export class UserDo extends DurableObject<EventEnvironment> {
 
       if (!userData) {
         console.log('closing ws due to missing user data')
-        // this.webSocketClose(ws, 1006)
+        this.webSocketClose(ws, 1006)
         return
       }
 
