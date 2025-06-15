@@ -149,7 +149,7 @@ app.post('/uploads', bodyLimit({ maxSize: 8 * 1024 * 1024, onError }), async (c)
     throw makeError(ErrorCode.UploadFailed, 500)
   }
 
-  return c.json(upload, 201)
+  return c.json(upload.value[0], 201)
 })
 
 export default app
