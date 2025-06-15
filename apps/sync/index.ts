@@ -137,6 +137,7 @@ export class UserDo extends DurableObject<EventEnvironment> {
       return
     }
 
+    console.log('getting user data and inputs for', user)
     const [[userData], inputs] = await this.db.batch([
       this.db.select().from(usersTable).where(eq(usersTable.id, user)),
       this.db
