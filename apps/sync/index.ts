@@ -138,40 +138,44 @@ export class UserDo extends DurableObject<EventEnvironment> {
     }
 
     console.log('getting user data and inputs for', user)
-    const [[userData], inputs] = await this.db.batch([
-      this.db.select().from(usersTable).where(eq(usersTable.id, user)),
-      this.db
-        .select({
-          stages: syncedMessagesTable.stages,
-          channelId: syncedMessagesTable.channelId,
-        })
-        .from(syncedMessagesTable)
-        .where(eq(syncedMessagesTable.userId, user)),
-    ])
+    try {
+      const [[userData], inputs] = await this.db.batch([
+        this.db.select().from(usersTable).where(eq(usersTable.id, user)),
+        this.db
+          .select({
+            stages: syncedMessagesTable.stages,
+            channelId: syncedMessagesTable.channelId,
+          })
+          .from(syncedMessagesTable)
+          .where(eq(syncedMessagesTable.userId, user)),
+      ])
 
-    console.log('user', user, userData, inputs)
+      console.log('user', user, userData, inputs)
 
-    if (!userData) {
-      console.log('closing ws due to missing user data')
-      // this.webSocketClose(ws, 1006)
-      return
-    }
+      if (!userData) {
+        console.log('closing ws due to missing user data')
+        // this.webSocketClose(ws, 1006)
+        return
+      }
 
-    ws.send(
-      JSON.stringify({
-        op: WebSocketOpCode.ServerHello,
-        data: {
-          user: {
-            id: userData.id,
-            name: userData.name,
-            defaultModel: userData.defaultModel,
-            displayModels: userData.displayModels,
+      ws.send(
+        JSON.stringify({
+          op: WebSocketOpCode.ServerHello,
+          data: {
+            user: {
+              id: userData.id,
+              name: userData.name,
+              defaultModel: userData.defaultModel,
+              displayModels: userData.displayModels,
+            },
+            inputs,
+            ts: Date.now(),
           },
-          inputs,
-          ts: Date.now(),
-        },
-      }),
-    )
+        }),
+      )
+    } catch (e) {
+      console.error('Error during server hello:', e)
+    }
   }
 
   async webSocketMessage(ws: WebSocket, message: string | ArrayBuffer) {
