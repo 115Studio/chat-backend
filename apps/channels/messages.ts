@@ -58,7 +58,7 @@ const createMessageDto = z.object({
 const getMessagesDto = z.object({
   from: z.string().optional(),
   to: z.string().optional(),
-  limit: z.number().min(25).max(100).default(50),
+  limit: z.coerce.number().min(25).max(100).default(50),
 })
 
 app.get('/:id/messages', zValidator('query', getMessagesDto, zResponse), async (c) => {

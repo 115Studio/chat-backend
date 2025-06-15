@@ -76,7 +76,7 @@ app.get('/', zValidator('query', getChannelsDto, zResponse), async (c) => {
       : undefined,
   ])
 
-  const result = pins ? [...pinned!, ...channels] : channels
+  const result = pins ? [...new Map([...pinned!, ...channels].map((c) => [c.id, c])).values()] : channels
 
   return c.json({
     channels: result,
