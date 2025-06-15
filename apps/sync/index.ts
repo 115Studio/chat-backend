@@ -107,7 +107,7 @@ export class UserDo extends DurableObject<EventEnvironment> {
     server.serializeAttachment(attachment)
     this.sessions.set(server, attachment)
 
-    this.serverHello(server)
+    void this.serverHello(server)
 
     return new Response(null, {
       status: 101,
@@ -128,6 +128,7 @@ export class UserDo extends DurableObject<EventEnvironment> {
   // }
 
   async serverHello(ws: WebSocket) {
+    console.log('sending server hello')
     const user = this.sessions.get(ws)?.meta.userId!
 
     const [[userData], inputs] = await this.db.batch([
