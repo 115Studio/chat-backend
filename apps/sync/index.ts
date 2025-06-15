@@ -129,7 +129,13 @@ export class UserDo extends DurableObject<EventEnvironment> {
 
   async serverHello(ws: WebSocket) {
     console.log('sending server hello')
-    const user = this.sessions.get(ws)?.meta.userId!
+    const user = this.sessions.get(ws)?.meta?.userId
+
+    if (!user) {
+      console.log('closing ws due to missing user')
+      this.webSocketClose(ws, 1006)
+      return
+    }
 
     const [[userData], inputs] = await this.db.batch([
       this.db.select().from(usersTable).where(eq(usersTable.id, user)),
@@ -145,6 +151,7 @@ export class UserDo extends DurableObject<EventEnvironment> {
     console.log('user', user, userData, inputs)
 
     if (!userData) {
+      console.log('closing ws due to missing user data')
       this.webSocketClose(ws, 1006)
       return
     }
