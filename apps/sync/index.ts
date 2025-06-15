@@ -236,6 +236,7 @@ export class UserDo extends DurableObject<EventEnvironment> {
   }
 
   webSocketClose(ws: WebSocket, code: number) {
+    console.log('Closing WebSocket', code)
     this.sessions.delete(ws)
 
     try {
