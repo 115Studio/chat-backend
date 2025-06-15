@@ -417,6 +417,7 @@ export class UserDo extends DurableObject<EventEnvironment> {
       if (!stage) {
         stage = value
         stages.set(value.id, stage)
+        continue
       }
 
       switch (stage.type) {
