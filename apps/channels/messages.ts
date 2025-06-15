@@ -272,7 +272,7 @@ app.post('/:id/messages', zValidator('json', createMessageDto, zResponse), async
     history = await db
       .select()
       .from(messagesTable)
-      .where(and(eq(messagesTable.id, channelId), eq(messagesTable.userId, jwt.id)))
+      .where(and(eq(messagesTable.channelId, channelId), eq(messagesTable.userId, jwt.id)))
       .limit(25)
       .execute()
   }

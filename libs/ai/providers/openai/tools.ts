@@ -8,6 +8,7 @@ import { AiToolName } from '../../../constants/ai-tool-name'
 import { AiResponse } from '../../ai-response'
 import { flagsToEffort } from '../../flags-to-effort'
 import { AiModelFlag } from '../../../constants/ai-model-flag'
+import { inspect } from 'node:util'
 
 export const imageGenDto = z.object({
   prompt: z.string().min(1).max(1000),
@@ -62,7 +63,7 @@ export const text = async (model: ModelSettings, messages: AiMessage[], id?: str
 
   const response = streamText({
     model: provider.responses(model.id),
-    messages: id ? [messages[messages.length - 1]] : messages,
+    messages,
     tools: {
       [AiToolName.WebSearch]: openai.tools.webSearchPreview(),
       [AiToolName.ImageGen]: tool({

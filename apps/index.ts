@@ -14,7 +14,11 @@ import byok from './byok'
 
 const app = new Hono<HonoEnvironment>().basePath('/api/v1')
 
-app.use(cors())
+app.use(
+  cors({
+    origin: '*',
+  }),
+)
 
 app.onError((err, ctx) => {
   if (err instanceof HTTPException) {
