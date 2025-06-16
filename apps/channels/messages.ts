@@ -32,6 +32,7 @@ import { AiModelFlag } from '../../libs/constants/ai-model-flag'
 import { stagesToFeatures } from '../../libs/ai/stages-to-features'
 import { modelToFeatures } from '../../libs/ai/model-to-features'
 import { completeMessageCreate } from './complete-message-create'
+import channels from './index'
 
 const app = new Hono<HonoEnvironment & JwtVariable>()
 
@@ -237,6 +238,7 @@ app.post('/:id/messages', zValidator('json', createMessageDto, zResponse), async
   const isNew = channelId === '@new'
 
   let channels: Channel[]
+  let history: Message[] = []
 
   if (isNew) {
     channelId = snowflake()
@@ -253,28 +255,32 @@ app.post('/:id/messages', zValidator('json', createMessageDto, zResponse), async
       .returning()
       .execute()
   } else {
-    channels = await db
-      .select()
-      .from(channelsTable)
-      .where(and(eq(channelsTable.id, channelId), eq(channelsTable.ownerId, jwt.id)))
-      .execute()
+    // Use batch to get channel and messages in parallel to save round trip
+    const [channelResults, messageResults] = await db.batch([
+      db
+        .select()
+        .from(channelsTable)
+        .where(and(eq(channelsTable.id, channelId), eq(channelsTable.ownerId, jwt.id))),
+      db
+        .select()
+        .from(messagesTable)
+        .where(and(eq(messagesTable.channelId, channelId), eq(messagesTable.userId, jwt.id)))
+        .orderBy(desc(messagesTable.createdAt))
+        .limit(25)
+    ])
+
+    if (!channelResults.length) {
+      throw makeError(ErrorCode.UnknownChannel, 404)
+    }
+
+    channels = channelResults
+    history = messageResults.reverse() // Reverse to get chronological order (oldest first)
   }
 
   const channel = channels[0]
 
   if (!channel) {
     throw makeError(ErrorCode.UnknownChannel, 404)
-  }
-
-  let history: Message[] = []
-
-  if (!isNew) {
-    history = await db
-      .select()
-      .from(messagesTable)
-      .where(and(eq(messagesTable.channelId, channelId), eq(messagesTable.userId, jwt.id)))
-      .limit(25)
-      .execute()
   }
 
   const lastMessage = history[history.length - 1]
@@ -286,7 +292,7 @@ app.post('/:id/messages', zValidator('json', createMessageDto, zResponse), async
   const userMessageId = snowflake(),
     systemMessageId = snowflake()
 
-  const [[userMessage], [systemMessage]] = await db.batch([
+  const batches = [
     db
       .insert(messagesTable)
       .values({
@@ -321,25 +327,22 @@ app.post('/:id/messages', zValidator('json', createMessageDto, zResponse), async
         createdAt: Date.now() + 1,
       })
       .returning(),
+    db.select().from(BYOKTable).where(eq(BYOKTable.userId, jwt.id)),
+  ]
+
+  if (personalityId) {
     db
-      .update(channelsTable)
-      .set({
-        updatedAt: Date.now(),
-      })
-      .where(eq(channelsTable.id, channelId)),
-  ])
+      .select()
+      .from(personalityTable)
+      .where(and(eq(personalityTable.id, personalityId), eq(personalityTable.userId, jwt.id)))
+  }
+
+  // It does not infer the types anyway, so any.
+  const [[userMessage], [systemMessage], byoks, personalityResults] = await db.batch(batches as any)
 
   history.push(userMessage)
 
-  const [personality] = personalityId
-    ? await db
-        .select()
-        .from(personalityTable)
-        .where(and(eq(personalityTable.id, personalityId), eq(personalityTable.userId, jwt.id)))
-        .execute()
-    : []
-
-  const byoks = await db.select().from(BYOKTable).where(eq(BYOKTable.userId, jwt.id)).execute()
+  const [personality] = personalityResults ? personalityResults : []
 
   c.executionCtx.waitUntil(
     completeMessageCreate(
@@ -365,4 +368,5 @@ app.post('/:id/messages', zValidator('json', createMessageDto, zResponse), async
     systemMessage,
   })
 })
+
 export default app
