@@ -80,6 +80,7 @@ export const sendMessage = async (
           }
 
           const chunk = decoder.decode(value, { stream: true })
+          console.log('Received chunk:', chunk)
           const stage = parseDataStreamPart(chunk) // This returns Required<MessageStage> except for id
 
           // Extract call ID from content if present
