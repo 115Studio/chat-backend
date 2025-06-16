@@ -66,7 +66,6 @@ export async function completeMessageCreate(
     ]
 
     const result = await doStub.askAiRpc(
-      env,
       { id: AiModel.GoogleGemini20Flash },
       summarizeSystemMessage,
       jwt.id,

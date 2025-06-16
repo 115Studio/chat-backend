@@ -494,7 +494,6 @@ export class UserDo extends DurableObject<EventEnvironment> {
    * give it to the durable object which is more suitable for long-running tasks
    */
   askAiRpc<R extends AiReturnType>(
-    env: EventEnvironment,
     model: ModelSettings,
     messages: AiMessage[],
     userId: string,
@@ -502,7 +501,7 @@ export class UserDo extends DurableObject<EventEnvironment> {
     returnType: AiReturnType = AiReturnType.Stream,
   ): Promise<(R extends AiReturnType.Stream ? ReadableStream<StreamMessageUpdate> : MessageStages) | null> {
     return askAi(
-      env,
+      this.env,
       model,
       messages,
       userId,
