@@ -30,10 +30,10 @@ export const text = async (
   const response = streamText({
     model: provider.chat(model.id),
     messages,
-    tools: {
-      // TODO: use google's search
-      [AiToolName.WebSearch]: openai.tools.webSearchPreview(),
-    },
+    // tools: {
+    //   // TODO: use google's search
+    //   [AiToolName.WebSearch]: openai.tools.webSearchPreview(),
+    // },
     toolChoice,
     providerOptions: {
       google: {
