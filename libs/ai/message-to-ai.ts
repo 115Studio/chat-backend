@@ -12,10 +12,16 @@ import { MessageStageType } from '../constants/message-stage-type'
 
 export type AiMessage = CoreUserMessage | CoreAssistantMessage | CoreSystemMessage
 
-export const messageToAi = (message: DbMessage): AiMessage => {
+export const messageToAi = (message: DbMessage): AiMessage | undefined => {
   const content: UserContent & AssistantContent = []
 
-  for (const stage of message.stages) {
+  const filtered = message.stages.filter(s => !!s.content?.value)
+
+  if (filtered.length === 0) {
+    return undefined
+  }
+
+  for (const stage of filtered) {
     switch (stage.type) {
       case MessageStageType.Think:
         if (stage.content?.value) {

@@ -27,7 +27,7 @@ export const sendMessage = async (
 ): Promise<ReadableStream<StreamMessageUpdate> | null> => {
   const provider = modelToProvider(model.id)
 
-  const keyForModel = byoks.find((byok) => byok.models.includes(model.id!))?.key
+  const keyForModel = byoks.find((byok) => byok.models.includes(model.id))?.key
   const decryptedKey = keyForModel ? await decryptByokKey(env, keyForModel) : null
 
   let stream: ReadableStream<any> | null = null

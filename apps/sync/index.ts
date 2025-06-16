@@ -384,7 +384,7 @@ export class UserDo extends DurableObject<EventEnvironment> {
         role: 'system',
         content: getSystemPrompt(personalityPrompt),
       },
-      ...history.map(messageToAi),
+      ...history.map(messageToAi).filter((m): m is AiMessage => !!m),
     ]
 
     const stream = await askAi<AiReturnType.Stream>(

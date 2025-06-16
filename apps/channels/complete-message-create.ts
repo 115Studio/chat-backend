@@ -56,7 +56,12 @@ export async function completeMessageCreate(
       },
       {
         role: 'user',
-        content,
+        content: [
+          {
+            type: 'text',
+            text: content,
+          }
+        ],
       },
     ]
 
