@@ -31,10 +31,10 @@ export const text = async (
   console.log(inspect(messages, { depth: Infinity, colors: true }))
 
   console.log(
-    await generateText({
+    inspect(await generateText({
       model: provider.chat(model.id),
       messages,
-    }),
+    }), { depth: Infinity, colors: true })
   )
 
   const response = streamText({
