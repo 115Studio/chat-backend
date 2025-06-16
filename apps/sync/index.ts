@@ -13,11 +13,11 @@ import {
   Message,
   messagesTable,
   MessageStage,
-  MessageStages,
+  MessageStages, ModelSettings,
   Personality,
   syncedMessagesTable,
   User,
-  usersTable,
+  usersTable
 } from '../../libs/db/schema'
 import { WebSocketOpCode } from '../../libs/constants/web-socket-op-code'
 import { AiReturnType } from '../../libs/constants/ai-return-type'
@@ -487,6 +487,28 @@ export class UserDo extends DurableObject<EventEnvironment> {
 
   getIncompleteMessage(messageId: string): MessageStages | undefined {
     return this.messages.get(messageId)
+  }
+
+  /*
+   * Used to reduce a cpu time load on the worker,
+   * give it to the durable object which is more suitable for long-running tasks
+   */
+  askAiRpc<R extends AiReturnType>(
+    env: EventEnvironment,
+    model: ModelSettings,
+    messages: AiMessage[],
+    userId: string,
+    byoks: BYOK[] = [],
+    returnType: AiReturnType = AiReturnType.Stream,
+  ): Promise<(R extends AiReturnType.Stream ? ReadableStream<StreamMessageUpdate> : MessageStages) | null> {
+    return askAi(
+      env,
+      model,
+      messages,
+      userId,
+      byoks,
+      returnType,
+    )
   }
 }
 

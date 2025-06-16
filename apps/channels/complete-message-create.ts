@@ -65,7 +65,7 @@ export async function completeMessageCreate(
       },
     ]
 
-    const result = await askAi<AiReturnType.Complete>(
+    const result = await doStub.askAiRpc(
       env,
       { id: AiModel.GoogleGemini20Flash },
       summarizeSystemMessage,
