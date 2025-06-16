@@ -43,7 +43,7 @@ const createMessageDto = z.object({
       type: z.enum(MessageStageType),
       content: z.object({
         type: z.enum(MessageStageContentType),
-        value: z.string().min(1).max(1000),
+        value: z.string().min(1).max(2500),
       }),
     }),
   ),
