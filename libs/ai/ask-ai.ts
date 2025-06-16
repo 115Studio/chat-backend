@@ -38,6 +38,7 @@ export const askAi = async <R extends AiReturnType>(
         if (!stage) {
           stage = value
           stages.set(value.id, stage)
+          continue
         }
 
         switch (stage.type) {
