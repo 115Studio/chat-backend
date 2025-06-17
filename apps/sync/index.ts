@@ -184,12 +184,16 @@ export class UserDo extends DurableObject<EventEnvironment> {
     const parsed = typeof message === 'string' ? JSON.parse(message) : message
 
     if (parsed.op === WebSocketOpCode.SyncInput) {
-      const { stages, channelId } = syncedMessageDto.parse(parsed.data)
+      try {
+        const { stages, channelId } = syncedMessageDto.parse(parsed.data)
 
-      await this.syncMessage(userId, sessionId, {
-        stages,
-        channelId,
-      })
+        await this.syncMessage(userId, sessionId, {
+          stages,
+          channelId,
+        })
+      } catch (e) {
+        console.error('Error parsing sync input:', e)
+      }
     }
   }
 
