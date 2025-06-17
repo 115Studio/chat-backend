@@ -64,6 +64,7 @@ export const text = async (model: ModelSettings, messages: AiMessage[], id?: str
   const response = streamText({
     model: provider.responses(model.id),
     messages,
+    onError: console.error,
     tools: {
       [AiToolName.WebSearch]: openai.tools.webSearchPreview(),
       [AiToolName.ImageGen]: tool({

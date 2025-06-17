@@ -20,6 +20,7 @@ export const text = async (
 
   const response = streamText({
     model: provider.languageModel(model.id),
+    onError: console.error,
     messages: messages
       .map(m => ({ ...m, providerOptions: { anthropic: { cacheControl: { type: 'ephemeral' } } } })),
     providerOptions: {

@@ -34,6 +34,7 @@ export const text = async (
     //   // TODO: use google's search
     //   [AiToolName.WebSearch]: openai.tools.webSearchPreview(),
     // },
+    onError: console.error,
     toolChoice,
     providerOptions: {
       google: {
