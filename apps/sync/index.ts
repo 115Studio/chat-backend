@@ -44,7 +44,6 @@ export interface SyncedMessage {
 const syncedMessageDto = z.object({
   stages: z.array(
     z.object({
-      id: z.string(),
       type: z.nativeEnum(MessageStageType),
       content: z.object({
         type: z.nativeEnum(MessageStageContentType),
