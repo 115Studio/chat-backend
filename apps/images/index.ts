@@ -68,13 +68,13 @@ app.post('/uploads', bodyLimit({ maxSize: 8 * 1024 * 1024, onError }), async (c)
     throw makeError(ErrorCode.UnknownUser, 404)
   }
 
-  let uploadsAllowedToday = 0
+  let uploadsAllowedToday = 999999
 
-  switch (user.plan) {
-    case UserPlan.Free:
-      uploadsAllowedToday = 5
-      break
-  }
+  // switch (user.plan) {
+  //   case UserPlan.Free:
+  //     uploadsAllowedToday = 100
+  //     break
+  // }
 
   const todayDate = new Date()
   todayDate.setUTCHours(0, 0, 0, 0)
