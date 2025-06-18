@@ -2,7 +2,7 @@
   "name": "chat-backend",
   "scripts": {
     "dev": "wrangler dev",
-    "deploy": "wrangler deploy",
+    "deploy": "npm run migrate:prod && wrangler deploy",
     "migrate:generate": "drizzle-kit generate",
     "migrate:dev": "wrangler d1 migrations apply DB",
     "migrate:prod": "wrangler d1 migrations apply DB --remote"
