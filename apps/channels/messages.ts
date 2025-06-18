@@ -429,7 +429,7 @@ app.patch('/:channelId/messages/:messageId/ai', zValidator('json', updateAiMessa
     throw makeError(ErrorCode.RateLimitExceeded, 429)
   }
 
-  const userMessage = history.findLast((m) => m.role === MessageRole.User)
+  const userMessage = history.find((m) => m.role === MessageRole.User)
 
   if (!userMessage) {
     throw makeError(ErrorCode.UnknownMessage, 404)
