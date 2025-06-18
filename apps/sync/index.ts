@@ -385,7 +385,7 @@ export class UserDo extends DurableObject<EventEnvironment> {
     const messages: AiMessage[] = [
       {
         role: 'system',
-        content: getSystemPrompt(personalityPrompt),
+        content: getSystemPrompt(current, personalityPrompt),
       },
       ...history.map(messageToAi).filter((m): m is AiMessage => !!m),
     ]
