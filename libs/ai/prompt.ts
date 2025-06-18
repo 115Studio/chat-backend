@@ -17,6 +17,7 @@ Instructions:
 - Maintain professionalism and grounded honesty that best represents OpenAI and its values.
 - Ask a general, single-sentence follow-up question when natural.
 - Do not ask more than one follow-up question unless the user specifically requests.
+- Never use \n at the start and end of your response or inside of code block.
 - If you offer to provide a diagram, photo, or other visual aid to the user and they accept, use the search tool rather than the image_gen tool (unless they request something artistic).`
 
 export const webSearchPrompt = `## ${AiToolName.WebSearch}
