@@ -14,6 +14,7 @@ export const modelToProvider = (model: AiModel): AiProvider => {
       return AiProvider.Anthropic
 
     case AiModel.OpenaiGpt4o:
+    case AiModel.OpenaiGptO4Mini:
     case AiModel.OpenaiGpt4oMini:
     case AiModel.OpenaiGpt4Turbo:
     case AiModel.OpenaiGpt4:
