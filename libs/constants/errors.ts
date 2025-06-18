@@ -17,6 +17,9 @@ export enum ErrorCode {
   UploadLimitExceeded,
   UnknownUpload,
   UploadTypeMismatch,
+  UnknownMessage,
+  ContentMissing,
+  CannotEditStages,
 
   BYOKNotFound = 3000,
   BYOKModelAlreadyUsed,
@@ -39,6 +42,9 @@ export const errorMessages: Record<ErrorCode, string> = {
   [ErrorCode.UnsupportedModelFeatures]: 'Unsupported model features',
   [ErrorCode.UnsupportedStage]: 'Unsupported stage',
   [ErrorCode.ProviderAuthMissing]: 'Provider authentication missing',
+  [ErrorCode.UnknownMessage]: 'Unknown message',
+  [ErrorCode.ContentMissing]: 'Content missing',
+  [ErrorCode.CannotEditStages]: 'Cannot edit stages on ai\'s message',
 
   [ErrorCode.UploadTooLarge]: 'Upload too large',
   [ErrorCode.UnsupportedFileType]: 'Unsupported file type',

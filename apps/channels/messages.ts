@@ -17,7 +17,7 @@ import {
   MessageStages,
   ModelSettings,
   personalityTable,
-  uploadsTable,
+  uploadsTable
 } from '../../libs/db/schema'
 import { MagicNumber } from '../../libs/constants/magic-number'
 import { and, desc, eq, gt, inArray, lt } from 'drizzle-orm'
@@ -32,7 +32,6 @@ import { AiModelFlag } from '../../libs/constants/ai-model-flag'
 import { stagesToFeatures } from '../../libs/ai/stages-to-features'
 import { modelToFeatures } from '../../libs/ai/model-to-features'
 import { completeMessageCreate } from './complete-message-create'
-import channels from './index'
 
 const app = new Hono<HonoEnvironment & JwtVariable>()
 
@@ -48,6 +47,16 @@ const createMessageDto = z.object({
       }),
     }),
   ),
+  model: z.object({
+    id: z.enum(AiModel),
+    key: z.string().optional(),
+    flags: z.array(z.enum(AiModelFlag)),
+  }),
+  groupId: z.string().optional(),
+  personalityId: z.string().optional(),
+})
+
+const updateAiMessageDto = z.object({
   model: z.object({
     id: z.enum(AiModel),
     key: z.string().optional(),
@@ -141,7 +150,7 @@ app.get('/:id/messages', zValidator('query', getMessagesDto, zResponse), async (
 app.post('/:id/messages', zValidator('json', createMessageDto, zResponse), async (c) => {
   const db = initDbConnect(c.env)
 
-  let { stages: stagesRaw, model, personalityId } = c.req.valid('json')
+  let { stages: stagesRaw, model, personalityId, groupId } = c.req.valid('json')
   model = model satisfies ModelSettings
 
   const stageFeatures = stagesToFeatures(stagesRaw as MessageStages)
@@ -297,7 +306,7 @@ app.post('/:id/messages', zValidator('json', createMessageDto, zResponse), async
       .insert(messagesTable)
       .values({
         id: userMessageId,
-        groupId: userMessageId,
+        groupId: groupId ?? userMessageId,
         channelId,
         userId: jwt.id,
 
@@ -314,7 +323,7 @@ app.post('/:id/messages', zValidator('json', createMessageDto, zResponse), async
       .insert(messagesTable)
       .values({
         id: systemMessageId,
-        groupId: systemMessageId,
+        groupId: groupId ?? systemMessageId,
         channelId,
         userId: jwt.id,
 
@@ -366,6 +375,124 @@ app.post('/:id/messages', zValidator('json', createMessageDto, zResponse), async
     channel,
     userMessage,
     systemMessage,
+  })
+})
+
+app.patch('/:channelId/messages/:messageId/ai', zValidator('json', updateAiMessageDto, zResponse), async (c) => {
+  const db = initDbConnect(c.env)
+
+  let { model, personalityId } = c.req.valid('json')
+  model = model satisfies ModelSettings
+
+  const messageId = c.req.param('messageId')
+  const channelId = c.req.param('channelId')
+
+  const jwt = c.get('jwt')
+
+  const [ [ messageWithChannel ], history ] = await db.batch([
+    db
+      .select()
+      .from(messagesTable)
+      .where(and(eq(messagesTable.id, messageId), eq(messagesTable.userId, jwt.id)))
+      .leftJoin(
+        channelsTable,
+        eq(channelsTable.id, channelId),
+      ),
+    db
+      .select()
+      .from(messagesTable)
+      .where(and(eq(messagesTable.channelId, channelId), eq(messagesTable.userId, jwt.id)))
+      .orderBy(desc(messagesTable.createdAt))
+      .limit(25)
+  ])
+
+  const systemMessage = messageWithChannel.messages
+  const channel = messageWithChannel.channels
+
+  if (!systemMessage) {
+    throw makeError(ErrorCode.UnknownMessage, 404)
+  }
+
+  if (systemMessage.role === MessageRole.User) {
+    throw makeError(ErrorCode.BadRequest, 400)
+  }
+
+  if (!channel) {
+    throw makeError(ErrorCode.UnknownChannel, 404)
+  }
+
+  const { doStub } = getDo(c.env, c.var.jwt.id)
+
+  const lastMessage = history[history.length - 1]
+
+  if (lastMessage && lastMessage.state !== MessageState.Completed && lastMessage.state !== MessageState.Failed) {
+    throw makeError(ErrorCode.RateLimitExceeded, 429)
+  }
+
+  const userMessage = history.findLast((m) => m.role === MessageRole.User)
+
+  if (!userMessage) {
+    throw makeError(ErrorCode.UnknownMessage, 404)
+  }
+
+  userMessage.model = model
+
+  const newSystemMessageId = snowflake()
+
+  const batches = [
+    db
+      .insert(messagesTable)
+      .values({
+        id: newSystemMessageId,
+        groupId: systemMessage.groupId,
+        channelId,
+        userId: jwt.id,
+
+        state: MessageState.Created,
+        role: MessageRole.Assistant,
+
+        model,
+        stages: [],
+
+        createdAt: Date.now(),
+      })
+      .returning(),
+    db.select().from(BYOKTable).where(eq(BYOKTable.userId, jwt.id)),
+  ]
+
+  if (personalityId) {
+    db
+      .select()
+      .from(personalityTable)
+      .where(and(eq(personalityTable.id, personalityId), eq(personalityTable.userId, jwt.id)))
+  }
+
+  // It does not infer the types anyway, so any.
+  const [[newSystemMessage], byoks, personalityResults] = await db.batch(batches as any)
+
+  history.push(newSystemMessage)
+
+  const [personality] = personalityResults ? personalityResults : []
+
+  c.executionCtx.waitUntil(
+    completeMessageCreate(
+      c.env,
+      db,
+      channel,
+      jwt,
+      userMessage.stages,
+      newSystemMessage,
+      userMessage,
+      history,
+      false,
+      personality?.prompt,
+      byoks,
+      doStub,
+    ),
+  )
+
+  return c.json({
+    systemMessage: newSystemMessage,
   })
 })
 

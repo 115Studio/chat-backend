@@ -23,12 +23,13 @@ export async function completeMessageCreate(
   personalityPrompt: string | undefined = undefined,
   byoks: BYOK[] = [],
   doStub: DurableObjectStub<UserDo>,
+  isEdit: boolean = false,
 ) {
   if (isNew) {
     await doStub.ackChannelCreate(jwt.id, channel)
   }
 
-  await doStub.ackMessageCreate(jwt.id, userMessage)
+  if (!isEdit) await doStub.ackMessageCreate(jwt.id, userMessage)
   await doStub.ackMessageCreate(jwt.id, systemMessage)
 
   const complementPromise = doStub.complementMessage(
