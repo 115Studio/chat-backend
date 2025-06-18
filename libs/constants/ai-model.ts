@@ -1,5 +1,6 @@
 export enum AiModel {
   OpenaiGpt4o = 'gpt-4o',
+  OpenaiGptO4Mini = 'gpt-o4-mini',
   OpenaiGpt4oMini = 'gpt-4o-mini',
   OpenaiGpt4Turbo = 'gpt-4-turbo',
   OpenaiGpt4 = 'gpt-4',
