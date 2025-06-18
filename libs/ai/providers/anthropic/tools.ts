@@ -18,11 +18,28 @@ export const text = async (
   const reasoningEffort = flagsToEffort(model.flags || [])
   const thinkingBudget = effortToBudgetAnthropic(reasoningEffort)
 
+  // only map last 4 messages to have cache control
+  const newMessages = []
+
+  let index = 0
+  for (const m of messages) {
+
+    if (index >= messages.length - 4) {
+      newMessages.push(m)
+    } else {
+      newMessages.push({
+        ...m,
+        providerOptions: { anthropic: { cacheControl: { type: 'ephemeral' } } }
+      })
+    }
+
+    index++
+  }
+
   const response = streamText({
     model: provider.languageModel(model.id),
     onError: console.error,
-    messages: messages
-      .map(m => ({ ...m, providerOptions: { anthropic: { cacheControl: { type: 'ephemeral' } } } })),
+    messages: newMessages,
     providerOptions: {
       anthropic: {
         thinking: {
