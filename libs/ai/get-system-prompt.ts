@@ -1,6 +1,7 @@
 import { Message } from '../db/schema'
 import { modelToProvider } from './model-to-provider'
 import { modelToFeatures } from './model-to-features'
+import { modelToName } from './model-to-name'
 import { AiModelFeature } from '../constants/ai-model-feature'
 import { defaultPrompt, imageGenPrompt, webSearchPrompt } from './prompt'
 
@@ -12,7 +13,7 @@ export const parseSystemPrompt = (message: Message, prompt: string): string => {
   const feature = (f: AiModelFeature) => features.includes(f) ? 'enabled' : 'disabled'
 
   return prompt
-    .replace(/{{model_name}}/g, message.model.id)
+    .replace(/{{model_name}}/g, modelToName(model))
     .replace(/{{provider_name}}/g, provider)
     .replace(/{{current_date}}/g, new Date().toISOString())
     .replace(/{{image_input_capabilities}}/g, feature(AiModelFeature.Vision))

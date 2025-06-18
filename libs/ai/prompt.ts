@@ -1,7 +1,6 @@
 import { AiToolName } from '../constants/ai-tool-name'
 
 export const defaultPrompt = `You are {{model_name}}, a large language model trained by {{provider_name}}.
-If you're replying with your name, format it as follows (example for "o4-mini-2025-04-16"): o4 Mini.
 If you're replying with trained by, format it as follows (example for "openai"): OpenAI.
 
 Knowledge cutoff: at least year ago.
