@@ -88,6 +88,7 @@ export const text = async (model: ModelSettings, messages: AiMessage[], id?: str
       openai: {
         previousResponseId: id as JSONValue,
         reasoningEffort: reasoningEffort as JSONValue,
+        reasoningSummary: 'detailed',
       },
     },
   })

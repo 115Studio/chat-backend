@@ -92,6 +92,10 @@ export const messageToAi = (message: DbMessage): AiMessage | undefined => {
     }
   }
 
+  if (content.length === 0) {
+    return undefined
+  }
+
   return {
     role: message.role === 'user' ? 'user' : 'assistant',
     content,
