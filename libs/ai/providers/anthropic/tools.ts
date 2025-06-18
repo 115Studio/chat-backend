@@ -25,12 +25,12 @@ export const text = async (
   for (const m of messages) {
 
     if (index >= messages.length - 4) {
-      newMessages.push(m)
-    } else {
       newMessages.push({
         ...m,
         providerOptions: { anthropic: { cacheControl: { type: 'ephemeral' } } }
       })
+    } else {
+      newMessages.push(m)
     }
 
     index++
