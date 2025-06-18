@@ -89,12 +89,14 @@ export async function completeMessageCreate(
   }
 
   const update = async (newName: string) => {
+    console.log('Updating channel name to:', newName, 'channel:', channel.id)
     const [newChannel] = await db
       .update(channelsTable)
       .set({ name: newName.trim(), updatedAt: Date.now() })
       .where(eq(channelsTable.id, channel.id))
       .returning()
       .execute()
+    console.log('Updated channel:', newChannel.name, 'channel:', channel.id)
 
     await doStub.ackChannelUpdate(jwt.id, newChannel)
   }

@@ -20,7 +20,7 @@ import {
   uploadsTable
 } from '../../libs/db/schema'
 import { MagicNumber } from '../../libs/constants/magic-number'
-import { and, desc, eq, gt, inArray, lt } from 'drizzle-orm'
+import { and, desc, eq, gt, inArray, lt, ne, or } from 'drizzle-orm'
 import { MessageState } from '../../libs/constants/message-state'
 import { MessageRole } from '../../libs/constants/message-role'
 import { makeError } from '../../libs/utils/make-error'
@@ -389,25 +389,33 @@ app.patch('/:channelId/messages/:messageId/ai', zValidator('json', updateAiMessa
 
   const jwt = c.get('jwt')
 
-  const [ [ messageWithChannel ], history ] = await db.batch([
+  const [ [ systemMessage ], [ channel ], historyRaw ] = await db.batch([
     db
       .select()
       .from(messagesTable)
-      .where(and(eq(messagesTable.id, messageId), eq(messagesTable.userId, jwt.id)))
-      .leftJoin(
-        channelsTable,
-        eq(channelsTable.id, channelId),
-      ),
+      .where(and(eq(messagesTable.id, messageId), eq(messagesTable.userId, jwt.id))),
+    db.select()
+      .from(channelsTable)
+      .where(and(eq(channelsTable.id, channelId), eq(channelsTable.ownerId, jwt.id))),
     db
       .select()
       .from(messagesTable)
-      .where(and(eq(messagesTable.channelId, channelId), eq(messagesTable.userId, jwt.id)))
+      .where(
+        and(
+          eq(messagesTable.channelId, channelId),
+          eq(messagesTable.userId, jwt.id),
+          or(
+            and(
+              eq(messagesTable.role, MessageRole.Assistant),
+              ne(messagesTable.groupId, messageId)
+            ),
+            eq(messagesTable.role, MessageRole.User),
+          )
+        )
+      )
       .orderBy(desc(messagesTable.createdAt))
       .limit(25)
   ])
-
-  const systemMessage = messageWithChannel.messages
-  const channel = messageWithChannel.channels
 
   if (!systemMessage) {
     throw makeError(ErrorCode.UnknownMessage, 404)
@@ -420,6 +428,10 @@ app.patch('/:channelId/messages/:messageId/ai', zValidator('json', updateAiMessa
   if (!channel) {
     throw makeError(ErrorCode.UnknownChannel, 404)
   }
+
+  console.log('channel id', channel.id, channel)
+
+  const history = historyRaw.reverse()
 
   const { doStub } = getDo(c.env, c.var.jwt.id)
 
@@ -488,6 +500,7 @@ app.patch('/:channelId/messages/:messageId/ai', zValidator('json', updateAiMessa
       personality?.prompt,
       byoks,
       doStub,
+      true,
     ),
   )
 
