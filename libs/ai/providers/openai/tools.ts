@@ -48,17 +48,17 @@ export const text = async (model: ModelSettings, messages: AiMessage[], id?: str
   const reasoningEffort = flagsToEffort(model.flags || [])
 
   const imageForced = model.flags?.includes(AiModelFlag.ImageGen)
-  const searchForced = model.flags?.includes(AiModelFlag.WebSearch)
+  // const searchForced = model.flags?.includes(AiModelFlag.WebSearch)
 
-  let toolChoice: { type: 'tool'; toolName: AiToolName.ImageGen | AiToolName.WebSearch } | undefined
+  let toolChoice: { type: 'tool'; toolName: AiToolName.ImageGen /*| AiToolName.WebSearch*/ } | undefined
 
   switch (true) {
     case !!imageForced:
       toolChoice = { type: 'tool', toolName: AiToolName.ImageGen }
       break
-    case !!searchForced:
-      toolChoice = { type: 'tool', toolName: AiToolName.WebSearch }
-      break
+    // case !!searchForced:
+    //   toolChoice = { type: 'tool', toolName: AiToolName.WebSearch }
+    //   break
   }
 
   const response = streamText({
@@ -66,7 +66,7 @@ export const text = async (model: ModelSettings, messages: AiMessage[], id?: str
     messages,
     onError: console.error,
     tools: {
-      [AiToolName.WebSearch]: openai.tools.webSearchPreview(),
+      // [AiToolName.WebSearch]: openai.tools.webSearchPreview(),
       [AiToolName.ImageGen]: tool({
         parameters: imageGenDto,
         execute: async (input: ImageGenerationInput) => {
